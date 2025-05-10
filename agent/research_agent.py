@@ -237,164 +237,7 @@ class ResearchAgent:
     # Alias for compatibility with tests
     _detect_language = detect_language
     
-    def _generate_sample_research_code(self) -> str:
-        """
-        Генерує приклад коду для дослідження, який буде виконано агентом.
-        
-        Returns:
-            Рядок з Python кодом для дослідження
-        """
-        code = '''
-# Приклад коду для дослідження ринку смартфонів в Україні
-import json
-import logging
 
-# Налаштування логування
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Ініціалізація результатів дослідження
-research_results = {
-    "query": "Дослідження ринку смартфонів в Україні",
-    "timestamp": "2023-06-15T10:30:00",
-    "success": True
-}
-
-# Крок 1: Збір інформації
-def gather_information():
-    logger.info("Збір інформації з різних джерел...")
-    
-    # Тут буде код для пошуку в Інтернеті, читання PDF, аналізу даних тощо
-    
-    # Приклад результатів збору інформації
-    return {
-        "success": True,
-        "sources": [
-            {
-                "title": "Ринок смартфонів в Україні",
-                "url": "https://example.com/smartphones-ukraine",
-                "content": "Ринок смартфонів в Україні оцінюється приблизно в $500 млн з річним темпом зростання близько 15%."
-            }
-        ]
-    }
-
-# Крок 2: Аналіз даних
-def analyze_data(gathered_info):
-    logger.info("Аналіз зібраних даних...")
-    
-    # Тут буде код для аналізу зібраної інформації
-    
-    # Приклад результатів аналізу
-    return {
-        "success": True,
-        "insights": [
-            "Ринок смартфонів в Україні зростає",
-            "Найпопулярніші бренди: Samsung, Apple, Xiaomi"
-        ],
-        "trends": [
-            "Зростання попиту на смартфони середнього цінового сегменту",
-            "Збільшення частки китайських виробників"
-        ],
-        "statistics": {
-            "market_size": "$500 млн",
-            "growth_rate": "15%",
-            "top_brands": ["Samsung", "Apple", "Xiaomi"]
-        }
-    }
-
-# Крок 3: Синтез та генерація звіту
-def generate_report(analysis_results, gathered_info):
-    logger.info("Синтез результатів та створення звіту...")
-    
-    # Створення комплексного звіту на основі плану дослідження
-    # Включення всіх необхідних цитат та посилань
-    
-    # Приклад звіту
-    summary = """Ринок смартфонів в Україні демонструє стабільне зростання з річним темпом близько 15%. 
-    Найпопулярнішими брендами є Samsung, Apple та Xiaomi. Спостерігається тенденція до збільшення 
-    попиту на смартфони середнього цінового сегменту та зростання частки китайських виробників."""
-    
-    full_report = """# Дослідження ринку смартфонів в Україні
-
-## Вступ
-Це дослідження аналізує поточний стан та тенденції розвитку ринку смартфонів в Україні.
-
-## Основні висновки
-- Ринок смартфонів в Україні оцінюється приблизно в $500 млн.
-- Щорічний темп зростання ринку становить близько 15%.
-- Найпопулярнішими брендами є Samsung, Apple та Xiaomi.
-- Спостерігається зростання попиту на смартфони середнього цінового сегменту.
-- Частка китайських виробників на ринку збільшується.
-
-## Детальний аналіз
-### Розмір та зростання ринку
-Ринок смартфонів в Україні демонструє стабільне зростання протягом останніх років. 
-За оцінками експертів, розмір ринку становить приблизно $500 млн з річним темпом зростання близько 15%.
-
-### Популярні бренди
-Найпопулярнішими брендами на українському ринку є:
-1. Samsung
-2. Apple
-3. Xiaomi
-
-### Тенденції
-- Зростання попиту на смартфони середнього цінового сегменту
-- Збільшення частки китайських виробників
-- Підвищення інтересу до смартфонів з підтримкою 5G
-
-## Висновки
-Ринок смартфонів в Україні є динамічним та перспективним. Очікується, що тенденції зростання 
-збережуться в найближчі роки, особливо з розвитком 5G-мереж та появою нових технологій.
-
-## Джерела
-- Дослідження ринку смартфонів в Україні (https://example.com/smartphones-ukraine)
-"""
-    
-    return {
-        "summary": summary,
-        "full_report": full_report,
-        "bibliography": [
-            {
-                "title": "Ринок смартфонів в Україні",
-                "url": "https://example.com/smartphones-ukraine"
-            }
-        ]
-    }
-
-# Головне виконання
-try:
-    # Збір інформації
-    gathered_info = gather_information()
-    logger.info("Зібрано джерел: %s", len(gathered_info.get('sources', [])))
-    
-    # Аналіз даних
-    if gathered_info["success"]:
-        analysis_results = analyze_data(gathered_info)
-        logger.info("Знайдено інсайтів: %s", len(analysis_results.get('insights', [])))
-        
-        # Генерація звіту
-        if analysis_results["success"]:
-            report = generate_report(analysis_results, gathered_info)
-            
-            # Оновлення результатів дослідження
-            research_results["summary"] = report["summary"]
-            research_results["full_report"] = report["full_report"]
-            research_results["analysis"] = analysis_results
-            research_results["sources"] = gathered_info["sources"]
-            research_results["findings"] = analysis_results["insights"]
-            
-            logger.info("Дослідження завершено успішно.")
-    
-    # Повернення результатів дослідження
-    logger.info("Результати дослідження: %s", json.dumps(research_results, indent=2))
-except Exception as e:
-    logger.error("Помилка під час дослідження: %s", str(e))
-    research_results["error"] = str(e)
-
-# Повернення результатів
-research_results
-'''
-        return code
     
     def _format_results(self, agent_results: Dict[str, Any], query: str, timestamp: str) -> Dict[str, Any]:
         """
@@ -657,23 +500,19 @@ research_results
         # Create task data for the execution
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Get research code (default or custom)
-        research_code = self._generate_sample_research_code()
-        
         # Create task data - ensure all values are proper types
         task = {
             "id": timestamp.replace(" ", "_").replace(":", ""),
             "query": str(query) if query else "",  # Ensure query is a string
             "language": str(self.language) if self.language else "uk",  # Ensure language is a string
             "timestamp": timestamp,
-            "code": research_code,
             "plan": plan
         }
         
         # Debug output for task data
-        self.logger.info("Task data types: id=%s, query=%s, language=%s, timestamp=%s, code=%s, plan=%s", 
+        self.logger.info("Task data types: id=%s, query=%s, language=%s, timestamp=%s, plan=%s", 
                        type(task["id"]), type(task["query"]), type(task["language"]), 
-                       type(task["timestamp"]), type(task["code"]), type(task["plan"]))
+                       type(task["timestamp"]), type(task["plan"]))
         
         # Execute the research task
         try:

@@ -1,63 +1,166 @@
-# Research Agent
+# Дослідницький Агент
 
-A research automation system built on the SmolaGents framework, designed to collect, analyze, and synthesize information from various sources to support research tasks.
+Система автоматизації досліджень, побудована на фреймворку SmolaGents, розроблена для збору, аналізу та синтезу інформації з різних джерел для підтримки дослідницьких завдань.
 
-## Features
+## Можливості
 
-- Natural language research query processing
-- Information search and retrieval from multiple sources
-- Data analysis and synthesis
-- Structured reporting with citations
-- Customizable research workflows
+- Обробка дослідницьких запитів природною мовою (українською та англійською)
+- Пошук та отримання інформації з множинних джерел
+- Глибокий аналіз та синтез даних
+- Структуровані звіти з цитуванням джерел
+- Налаштовувані робочі процеси досліджень
+- Автоматичне визначення та підтримка мови запиту
 
-## Architecture
+## Архітектура
 
-The system is built with a modular architecture:
+Система побудована на модульній архітектурі:
 
-- **Research Management Module**: Coordinates the research process
-- **Analytics Module**: Processes and analyzes collected data
-- **Interface Module**: Integrates with external systems
-- **Storage Module**: Maintains context and intermediate results
+- **Модуль керування дослідженнями**: Координує процес дослідження
+- **Аналітичний модуль**: Обробляє та аналізує зібрані дані
+- **Модуль інтерфейсу**: Інтегрується з зовнішніми системами
+- **Модуль зберігання**: Підтримує контекст та проміжні результати
 
-## Tools
+## Інструменти
 
-- Web search via API services
-- URL content fetching
-- PDF document analysis
-- Data analysis and visualization
-- Database management for collected data
+- Веб-пошук через API сервіси (BraveSearch для українських запитів, Serper як резервний)
+- Завантаження вмісту URL
+- Аналіз PDF документів
+- Аналіз та візуалізація даних
+- Управління базою даних для зібраної інформації
 
-## Setup
+## Налаштування
 
-1. Clone the repository
-2. Create a virtual environment: `python -m venv venv`
-3. Activate the environment:
+1. Клонуйте репозиторій: `git clone [URL репозиторію]`
+2. Створіть віртуальне середовище: `python -m venv venv`
+3. Активуйте середовище:
    - Windows: `venv\Scripts\activate`
    - Unix/MacOS: `source venv/bin/activate`
-4. Install dependencies: `pip install -r requirements.txt`
-5. Copy `.env.example` to `.env` and fill in your API keys
-6. Run the application: `python main.py`
+4. Встановіть залежності: `pip install -r requirements.txt`
+5. Скопіюйте `.env.example` в `.env` та заповніть своїми API ключами:
+   - `OPENAI_API_KEY` - ключ для OpenAI API (обов'язково)
+   - `ANTHROPIC_API_KEY` - ключ для Anthropic API (опціонально)
+   - `SERPER_API_KEY` - ключ для Serper API (резервний пошук)
+   - `BRAVESEARCH_API_KEY` - ключ для BraveSearch API (основний пошук)
+6. Запустіть додаток: `python main.py`
 
-## Usage
+## Використання
 
 ```bash
-# Basic usage
-python main.py "Research query"
+# Базове використання
+python main.py "Дослідницький запит"
 
-# With configuration file
-python main.py --config config.json
+# З файлом конфігурації
+python main.py --config config/default_config.json
 
-# Export results to file
-python main.py "Research query" --output report.md
+# Експорт результатів у файл
+python main.py "Дослідницький запит" --output звіт.md
+
+# Вказання конкретної мови (uk або en)
+python main.py "Дослідницький запит" --language uk
 ```
 
-## Development
+## Конфігурація
 
-- Follow the modular architecture
-- Document code with docstrings
-- Add tests for new components
-- Keep API keys in environment variables
+Система використовує файл конфігурації в форматі JSON. Основні параметри:
 
-## License
+- **llm**: Налаштування моделі мови (провайдер, модель, температура)
+- **tools**: Конфігурація інструментів (пошук, URL, PDF, аналіз даних тощо)
+- **planning**: Параметри планування дослідження
+- **language**: Налаштування мови (основна, підтримувані, автовизначення)
+- **output**: Формат виводу та включення цитувань
+
+Приклад:
+
+```json
+{
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4-turbo",
+    "temperature": 0.7
+  },
+  "tools": {
+    "search": {
+      "enabled": true,
+      "engine": "brave"
+    }
+  },
+  "planning": {
+    "research_depth": "deep"
+  },
+  "language": {
+    "primary": "uk",
+    "supported": ["uk", "en"],
+    "auto_detect": true
+  }
+}
+```
+
+## Тестування
+
+Для запуску тестів використовуйте:
+
+```bash
+# Запуск всіх тестів
+pytest
+
+# Запуск конкретного модуля тестів
+pytest tests/test_research_agent.py
+
+# Запуск з деталізованим виводом
+pytest -v
+```
+
+### Середовище для тестування
+
+1. Створіть окреме віртуальне середовище для тестів:
+
+   ```bash
+   python -m venv test_venv
+   source test_venv/bin/activate  # для Unix/MacOS
+   ```
+
+2. Встановіть залежності для тестування:
+
+   ```bash
+   pip install -r requirements_dev.txt
+   ```
+
+3. Створіть файл `.env.test` з тестовими API ключами.
+
+### Додавання нових тестів
+
+При додаванні нових функцій, рекомендується створювати відповідні тести:
+
+1. Створіть тестовий файл у директорії `tests/`
+2. Використовуйте fixture-и для повторного використання коду
+3. Імплементуйте тести для успішних сценаріїв та обробки помилок
+
+## Розробка
+
+- Дотримуйтесь модульної архітектури
+- Документуйте код за допомогою docstrings
+- Додавайте тести для нових компонентів
+- Зберігайте API ключі у змінних середовища
+- Використовуйте чіткі назви функцій та класів
+- Перевіряйте новий код за допомогою лінтерів та форматерів
+
+## Вирішення проблем
+
+### Поширені помилки
+
+- **401 Unauthorized при пошукових запитах**: Перевірте правильність API ключів у `.env` файлі
+- **Помилка імпорту модулів**: Переконайтесь, що всі залежності встановлені
+- **RuntimeError при серіалізації даних**: Переконайтесь, що дані перетворені у JSON-сумісний формат
+
+### Логування
+
+Система використовує модуль `logging` для запису діагностичних повідомлень. Щоб змінити рівень логування:
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)  # Для детальнішого логування
+```
+
+## Ліцензія
 
 MIT
