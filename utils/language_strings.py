@@ -30,6 +30,9 @@ STRINGS = {
         "no_results": "No results were found for this query.",
         "update_smolagents": "The agent requires tools compatible with smolagents 1.15.0.",
         "update_smolagents_detailed": "The Research Agent is using smolagents 1.15.0, but the current tools are not compatible with this version. The tools need to be updated to inherit from the smolagents.Tool class. Please update the tools implementation to make them compatible with the new API.",
+        "results_completed": "Research for '{query}' has been completed.",
+        "results_error": "An error occurred while processing the research results.",
+        "results_critical_error": "A critical error occurred while formatting the research results.",
         
         # System prompts
         "system_prompt": """
@@ -79,6 +82,9 @@ Follow these guidelines:
         "no_results": "За цим запитом не знайдено результатів.",
         "update_smolagents": "Агент потребує інструменти, сумісні з smolagents 1.15.0.",
         "update_smolagents_detailed": "Дослідницький агент використовує smolagents 1.15.0, але поточні інструменти не сумісні з цією версією. Інструменти повинні бути оновлені, щоб успадковуватися від класу smolagents.Tool. Будь ласка, оновіть реалізацію інструментів, щоб вони були сумісні з новим API.",
+        "results_completed": "Дослідження за запитом '{query}' завершено.",
+        "results_error": "Під час обробки результатів дослідження сталася помилка.",
+        "results_critical_error": "Під час форматування результатів дослідження сталася критична помилка.",
         
         # System prompts
         "system_prompt": """

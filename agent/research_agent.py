@@ -30,6 +30,7 @@ from tools.data_analysis_tool import DataAnalysisTool
 from tools.visualization_tool import VisualizationTool
 from tools.database_tool import DatabaseTool
 from utils.language_strings import get_string
+from utils.results_enhancer import ResultsEnhancer
 
 
 class ResearchAgent:
@@ -403,14 +404,199 @@ research_results
             agent_results: Raw output from the agent
             query: Original research query
             timestamp: Timestamp when research was conducted
-                except (ValueError, KeyError, TypeError, AttributeError) as e:
-                    self.logger.warning("Error enhancing non-dict report: %s", str(e))
             
+        Returns:
+            Formatted research results dictionary
+        """
+        try:
+            self.logger.info("\n")
+            self.logger.info("Result type: %s", type(agent_results))
+            self.logger.info("")
+            
+            # Спроба імпортувати ResultsEnhancer для покращення результатів
+            try:
+                # from utils.results_enhancer import ResultsEnhancer # Already imported at the top
+                enhancer = ResultsEnhancer()
+                has_enhancer = True
+                self.logger.info("Using ResultsEnhancer to improve results quality")
+            except ImportError:
+                has_enhancer = False
+                self.logger.warning("ResultsEnhancer not available, using basic formatting")
+            
+            if isinstance(agent_results, dict):
+                self.logger.info("Result keys: %s", agent_results.keys())
+                self.logger.info("")
+                
+                # For legacy reasons/compatibility with older models
+                if 'response' in agent_results:
+                    content = agent_results["response"]
+                    
+                    # Використовуємо enhancer для покращення вмісту, якщо він доступний
+                    if has_enhancer and isinstance(content, str) and len(content) > 0:
+                        try:
+                            # Створюємо структуру для аналізу
+                            analysis_content = {"full_report": content}
+                            enhanced_content = enhancer.enhance_results(analysis_content)
+                            content = enhanced_content.get("full_report", content)
+                            self.logger.info("Enhanced raw response content")
+                        except (ValueError, KeyError, TypeError, AttributeError) as e:
+                            self.logger.warning("Error enhancing response content: %s", str(e))
+                    
+                    research_results = {
+                        "query": query,
+                        "timestamp": timestamp,
+                        "summary": get_string("results_completed", self.language).format(query=query),
+                        "full_report": content,
+                        "section_titles": {
+                            "summary": get_string("results_summary", self.language),
+                            "full_report": get_string("results_full", self.language),
+                            "sources": get_string("results_sources", self.language),
+                            "findings": get_string("results_findings", self.language),
+                            "analysis": get_string("results_analysis", self.language),
+                            "limitations": get_string("results_limitations", self.language)
+                        }
+                    }
+                # For smolagent version ~1.15.0
+                elif 'Summary of Findings' in agent_results:
+                    # Already a results dict - покращуємо результати, якщо доступно
+                    if has_enhancer:
+                        try:
+                            enhanced_results = enhancer.enhance_results(agent_results)
+                            self.logger.info("Enhanced results with more detailed content")
+                            full_report = enhanced_results
+                        except (ValueError, KeyError, TypeError, AttributeError) as e:
+                            self.logger.warning("Error enhancing structured results: %s", str(e))
+                            full_report = agent_results
+                    else:
+                        full_report = agent_results
+                        
+                    research_results = {
+                        "query": query,
+                        "timestamp": timestamp,
+                        "summary": get_string("results_completed", self.language).format(query=query),
+                        "full_report": full_report,
+                        "section_titles": {
+                            "summary": get_string("results_summary", self.language),
+                            "full_report": get_string("results_full", self.language),
+                            "sources": get_string("results_sources", self.language),
+                            "findings": get_string("results_findings", self.language),
+                            "analysis": get_string("results_analysis", self.language),
+                            "limitations": get_string("results_limitations", self.language)
+                        }
+                    }
+                # For smolagent version ~1.15.0 but different format
+                elif 'content' in agent_results:
+                    content = agent_results["content"]
+                    # Спроба покращити контент, якщо він є словником
+                    if has_enhancer and isinstance(content, dict):
+                        try:
+                            enhanced_content = enhancer.enhance_results(content)
+                            content = enhanced_content
+                            self.logger.info("Enhanced dictionary content")
+                        except (ValueError, KeyError, TypeError, AttributeError) as e:
+                            self.logger.warning("Error enhancing dictionary content: %s", str(e))
+                    elif has_enhancer and isinstance(content, str) and len(content) > 0:
+                        try:
+                            # Створюємо структуру для аналізу, якщо це просто рядок
+                            analysis_content = {"full_report": content}
+                            enhanced_content = enhancer.enhance_results(analysis_content)
+                            content = enhanced_content.get("full_report", content)
+                            self.logger.info("Enhanced string content from 'content' key")
+                        except (ValueError, KeyError, TypeError, AttributeError) as e:
+                            self.logger.warning("Error enhancing string content from 'content' key: %s", str(e))
+                    
+                    research_results = {
+                        "query": query,
+                        "timestamp": timestamp,
+                        "summary": get_string("results_completed", self.language).format(query=query),
+                        "full_report": content,
+                        "section_titles": {
+                            "summary": get_string("results_summary", self.language),
+                            "full_report": get_string("results_full", self.language),
+                            "sources": get_string("results_sources", self.language),
+                            "findings": get_string("results_findings", self.language),
+                            "analysis": get_string("results_analysis", self.language),
+                            "limitations": get_string("results_limitations", self.language)
+                        }
+                    }
+                else:
+                    self.logger.warning("Unrecognized dictionary structure for agent_results. Using raw dictionary.")
+                    # Якщо структура невідома, намагаємося покращити її, якщо це можливо
+                    if has_enhancer:
+                        try:
+                            enhanced_results = enhancer.enhance_results(agent_results)
+                            self.logger.info("Enhanced unrecognized dictionary structure")
+                            full_report_content = enhanced_results
+                        except (ValueError, KeyError, TypeError, AttributeError) as e:
+                            self.logger.warning("Error enhancing unrecognized dictionary structure: %s", str(e))
+                            full_report_content = agent_results
+                    else:
+                        full_report_content = agent_results
+                        
+                    research_results = {
+                        "query": query,
+                        "timestamp": timestamp,
+                        "summary": get_string("results_completed", self.language).format(query=query),
+                        "full_report": full_report_content,
+                        "section_titles": {
+                            "summary": get_string("results_summary", self.language),
+                            "full_report": get_string("results_full", self.language),
+                            "sources": get_string("results_sources", self.language),
+                            "findings": get_string("results_findings", self.language),
+                            "analysis": get_string("results_analysis", self.language),
+                            "limitations": get_string("results_limitations", self.language)
+                        }
+                    }
+            elif isinstance(agent_results, str):
+                self.logger.info("Agent results is a string. Length: %d", len(agent_results))
+                content = agent_results
+                # Покращуємо рядок, якщо enhancer доступний
+                if has_enhancer and len(content) > 0:
+                    try:
+                        analysis_content = {"full_report": content}
+                        enhanced_content = enhancer.enhance_results(analysis_content)
+                        content = enhanced_content.get("full_report", content)
+                        self.logger.info("Enhanced string results")
+                    except (ValueError, KeyError, TypeError, AttributeError) as e:
+                        self.logger.warning("Error enhancing string results: %s", str(e))
+                
+                research_results = {
+                    "query": query,
+                    "timestamp": timestamp,
+                    "summary": get_string("results_completed", self.language).format(query=query),
+                    "full_report": content,
+                    "section_titles": {
+                        "summary": get_string("results_summary", self.language),
+                        "full_report": get_string("results_full", self.language),
+                        "sources": get_string("results_sources", self.language),
+                        "findings": get_string("results_findings", self.language),
+                        "analysis": get_string("results_analysis", self.language),
+                        "limitations": get_string("results_limitations", self.language)
+                    }
+                }
+            else:
+                self.logger.error("Unsupported agent_results type: %s. Returning raw results.", type(agent_results))
+                research_results = {
+                    "query": query,
+                    "timestamp": timestamp,
+                    "summary": get_string("results_error", self.language),
+                    "full_report": str(agent_results),  # Перетворюємо на рядок для безпеки
+                    "section_titles": {
+                        "summary": get_string("results_summary", self.language),
+                        "full_report": get_string("results_full", self.language),
+                        "sources": get_string("results_sources", self.language),
+                        "findings": get_string("results_findings", self.language),
+                        "analysis": get_string("results_analysis", self.language),
+                        "limitations": get_string("results_limitations", self.language)
+                    }
+                }
+        except Exception as e:
+            self.logger.error("Critical error in _format_results: %s", str(e), exc_info=True)
             research_results = {
                 "query": query,
                 "timestamp": timestamp,
-                "summary": f"Дослідження за запитом '{query}' завершено.",
-                "full_report": report,
+                "summary": get_string("results_critical_error", self.language),
+                "full_report": f"Error: {str(e)}",
                 "section_titles": {
                     "summary": get_string("results_summary", self.language),
                     "full_report": get_string("results_full", self.language),
@@ -420,26 +606,44 @@ research_results
                     "limitations": get_string("results_limitations", self.language)
                 }
             }
-        
-        # Store results in context
-        # Add compatibility with tests
-        if hasattr(self.context, 'add_results'):
-            self.context.add_results(research_results)
-        else:
-            # Fallback for older versions of ContextManager
-            if not hasattr(self.context, 'results'):
-                self.context.results = []
-            self.context.results.append(research_results)
-        
-        # Return formatted results
+            
+        self.logger.debug("Formatted results: %s", json.dumps(research_results, indent=2, ensure_ascii=False))
         return research_results
-    
-    except Exception as e:
-        self.logger.error("Error formatting results: %s", str(e))
-        # Fallback для безпечного повернення
-        return {
-            "query": query,
+
+    def _save_results(self, results: Dict[str, Any]):
+        """
+        Save the research results to the database.
         
+        Args:
+            results: Research results to save
+        """
+        try:
+            # Store results in context
+            # Add compatibility with tests
+            if hasattr(self.context, 'add_results'):
+                self.context.add_results(results)
+            else:
+                # Fallback for older versions of ContextManager
+                if not hasattr(self.context, 'results'):
+                    self.context.results = []
+                self.context.results.append(results)
+            
+            # Save results to database
+            self.database_tool.save_results(results)
+        except Exception as e:
+            self.logger.error("Error saving results: %s", str(e))
+            
+    def process_query(self, query: str, progress_callback: Optional[Callable[[float], None]] = None) -> Dict[str, Any]:
+        """
+        Process a research query and return the results.
+        
+        Args:
+            query: Research query to process
+            progress_callback: Optional callback function to report progress
+            
+        Returns:
+            Research results dictionary
+        """
         # Detect language if not specified
         detected_lang = self.detect_language(query)
         if detected_lang != self.language:

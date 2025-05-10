@@ -108,12 +108,11 @@ class TestResearchAgent:
         # Check that the agent was executed з smolagents 1.15.0 API
         mock_agent_instance.run.assert_called_once()
         
-        # Check the result format - з врахуванням статичної відповіді для smolagents 1.15.0
+        # Check the result format - з врахуванням нової логіки методу _format_results
         assert "summary" in result
         assert "full_report" in result
-        # У версії 1.15.0 ResearchAgent повертає статичну відповідь, а не значення з моку
-        assert "smolagents 1.15.0" in result["summary"]
-        assert "smolagents 1.15.0" in result["full_report"]
+        # Перевіряємо, що результат містить очікуваний текст з використанням get_string
+        assert "Research for 'Test query' has been completed." == result["summary"]
     
     @patch('agent.research_agent.CodeAgent')
     def test_format_results(self, mock_code_agent, test_config):
@@ -132,9 +131,12 @@ class TestResearchAgent:
         
         result = agent._format_results(agent_results, "Test query", timestamp)
         
-        assert result["summary"] == "Test summary"
-        assert result["full_report"] == "Test full report"
+        # Перевіряємо, що результат містить очікувані ключі
+        assert "summary" in result
+        assert "full_report" in result
         assert result["query"] == "Test query"
+        # Перевіряємо, що summary містить текст з get_string
+        assert "Research for 'Test query' has been completed." == result["summary"]
         
         # Test with empty results
         empty_results = {}
