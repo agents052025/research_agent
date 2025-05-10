@@ -161,17 +161,40 @@ class VisualizationTool(Tool):
         self.logger.info("Creating table visualization")
         
         # Convert to DataFrame if not already
-        if isinstance(data, pd.DataFrame):
-            df = data
-        elif isinstance(data, dict):
-            df = pd.DataFrame(data)
-        elif isinstance(data, list):
-            if headers:
-                df = pd.DataFrame(data, columns=headers)
+        try:
+            if isinstance(data, pd.DataFrame):
+                df = data
+            elif isinstance(data, dict):
+                # Перевірка на випадок, якщо словник містить неоднорідні дані
+                try:
+                    df = pd.DataFrame(data)
+                except ValueError as e:
+                    self.logger.warning(f"Error converting dict to DataFrame: {e}")
+                    # Спроба перетворити словник у більш простий формат
+                    simple_data = {}
+                    for key, value in data.items():
+                        if isinstance(value, (list, dict)):
+                            simple_data[key] = str(value)
+                        else:
+                            simple_data[key] = value
+                    df = pd.DataFrame([simple_data])
+            elif isinstance(data, list):
+                # Перевірка, чи список містить словники або інші складні типи
+                if data and isinstance(data[0], tuple) and len(data[0]) == 2:
+                    # Список кортежів (ключ, значення)
+                    keys = [item[0] for item in data]
+                    values = [item[1] for item in data]
+                    df = pd.DataFrame({"Key": keys, "Value": values})
+                elif headers:
+                    df = pd.DataFrame(data, columns=headers)
+                else:
+                    df = pd.DataFrame(data)
             else:
-                df = pd.DataFrame(data)
-        else:
-            return {"error": "Unsupported data format"}
+                # Для примітивних типів створюємо простий DataFrame
+                df = pd.DataFrame({"Value": [str(data)]})
+        except Exception as e:
+            self.logger.error(f"Failed to convert data to DataFrame: {e}")
+            return {"error": f"Failed to create table: {str(e)}", "raw_data": str(data)[:1000]}
             
         # Use DataFrame column names if headers not provided
         if not headers:

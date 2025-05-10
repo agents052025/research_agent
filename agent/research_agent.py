@@ -736,6 +736,24 @@ research_results
                 
             # Форматуємо результати дослідження
             formatted_results = self._format_results(agent_results, query, timestamp)
+            
+            # Зберігаємо результати у базу даних
+            self._save_results(formatted_results)
+            
+            # Зберігаємо результати у файл
+            if "full_report" in formatted_results:
+                # Створюємо унікальне ім'я файлу на основі запиту та часової мітки
+                safe_query = re.sub(r'[^\w\s]', '', query[:30]).strip().replace(' ', '_').lower()
+                filename = f"res_{safe_query}_{timestamp.replace(' ', '_').replace(':', '')}.txt"
+                
+                try:
+                    with open(filename, "w", encoding="utf-8") as f:
+                        f.write(formatted_results["full_report"])
+                    self.logger.info(f"Results saved to file: {filename}")
+                    formatted_results["report_file"] = filename
+                except Exception as e:
+                    self.logger.error(f"Error saving results to file: {str(e)}")
+            
             return formatted_results
             
         except Exception as e:

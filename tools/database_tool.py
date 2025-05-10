@@ -842,6 +842,34 @@ class DatabaseTool(Tool):
             self.logger.error("Error exporting database: %s", str(e))
             return False
             
+    def save_results(self, results: Dict[str, Any]) -> int:
+        """
+        Save research results to the database and return the session ID.
+        
+        Args:
+            results: Research results dictionary
+            
+        Returns:
+            Session ID or -1 if failed
+        """
+        try:
+            # Extract data from results
+            query = results.get("query", "")
+            sources = results.get("sources", [])
+            
+            # Store the research session
+            session_id = self.store_research_session(query, results, sources)
+            
+            # Store the full report as a data item for easy retrieval
+            if "full_report" in results:
+                report_key = f"report_{session_id}_{int(time.time())}"
+                self.store_data(report_key, results["full_report"], "text")
+            
+            return session_id
+        except Exception as e:
+            self.logger.error("Error saving results: %s", str(e))
+            return -1
+    
     def import_database(self, import_path: str, replace: bool = False) -> bool:
         """
         Import a database from a file.
