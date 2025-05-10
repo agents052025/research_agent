@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 # Load project modules
 from agent.research_agent import ResearchAgent
+from agent.simple_research_agent import SimpleResearchAgent
 from config.config_manager import ConfigManager
 from core.logging_manager import setup_logging
 
@@ -50,6 +51,11 @@ def parse_arguments():
         action="store_true",
         help="Run in interactive mode"
     )
+    parser.add_argument(
+        "--simple", "-s",
+        action="store_true",
+        help="Use SimpleResearchAgent instead of ResearchAgent"
+    )
     return parser.parse_args()
 
 
@@ -72,7 +78,7 @@ def setup_environment():
         sys.exit(1)
 
 
-def interactive_mode(config_manager):
+def interactive_mode(config_manager, use_simple_agent=False):
     """Run the agent in interactive mode."""
     console = Console()
     console.print(Panel(
@@ -80,6 +86,10 @@ def interactive_mode(config_manager):
         "Type your research query or 'exit' to quit.",
         title="Welcome"
     ))
+    
+    # Show which agent type is being used
+    agent_type = "SimpleResearchAgent" if use_simple_agent else "ResearchAgent"
+    console.print(f"[blue]Using: {agent_type}[/blue]")
     
     while True:
         query = console.input("[bold blue]Research Query:[/bold blue] ")
@@ -90,8 +100,11 @@ def interactive_mode(config_manager):
             continue
             
         try:
-            # Initialize agent with current configuration
-            agent = ResearchAgent(config_manager.get_config())
+            # Initialize agent with current configuration based on the selected type
+            if use_simple_agent:
+                agent = SimpleResearchAgent(config_manager.get_config())
+            else:
+                agent = ResearchAgent(config_manager.get_config())
             
             # Process the query
             with Progress() as progress:
@@ -129,9 +142,14 @@ def main():
     config_manager = ConfigManager(config_path)
     
     try:
+        # Get the agent type to use
+        use_simple_agent = args.simple
+        agent_type = "SimpleResearchAgent" if use_simple_agent else "ResearchAgent"
+        logger.info(f"Using agent type: {agent_type}")
+        
         # Interactive mode
         if args.interactive:
-            interactive_mode(config_manager)
+            interactive_mode(config_manager, use_simple_agent)
             return
             
         # Check if query is provided
@@ -142,14 +160,21 @@ def main():
                 "Use --interactive mode or provide a query.[/bold yellow]"
             )
             sys.exit(1)
-            
+        
+        # Show which agent type is being used
+        console = Console()
+        console.print(f"[blue]Using: {agent_type}[/blue]")
+        
         # Initialize the research agent
-        agent = ResearchAgent(config_manager.get_config())
+        if use_simple_agent:
+            agent = SimpleResearchAgent(config_manager.get_config())
+        else:
+            agent = ResearchAgent(config_manager.get_config())
         
         # Process the query
-        console = Console()
-        with console.status("[bold green]Researching...[/bold green]", spinner="dots"):
-            results = agent.process_query(args.query)
+        with Progress() as progress:
+            task = progress.add_task("[green]Researching...", total=100)
+            results = agent.process_query(args.query, progress_callback=lambda p: progress.update(task, completed=p))
         
         # Display results
         console.print(Panel(results["summary"], title="Research Summary"))

@@ -10,13 +10,63 @@ from datetime import datetime
 import fitz  # PyMuPDF
 import requests
 from io import BytesIO
+from smolagents import Tool
 
 
-class PDFReaderTool:
-    """
+class PDFReaderTool(Tool):
+    # Атрибути для smolagents.Tool
+    name = "pdf_reader"
+    description = """
     Extracts and processes content from PDF documents.
     Supports reading from local files and URLs.
     """
+    inputs = {
+        "action": {
+            "type": "string",
+            "description": "Action to perform (read, extract_sections, summarize)",
+        },
+        "source": {
+            "type": "string",
+            "description": "Path or URL to the PDF file",
+        },
+        "pages": {
+            "type": "string",
+            "description": "Specific pages to extract (int, list, or range string like '1-5')",
+            "nullable": True
+        },
+        "max_length": {
+            "type": "integer",
+            "description": "Maximum length of summary per page (for summarize action)",
+            "nullable": True
+        }
+    }
+    output_type = "object"
+    
+    def forward(self, action: str, source: str, pages: Optional[Union[int, List[int], str]] = None, max_length: int = 1000) -> Dict[str, Any]:
+        """
+        Forward method required by smolagents.Tool.
+        Dispatches to appropriate PDF processing methods based on the action.
+        
+        Args:
+            action: Action to perform (read, extract_sections, summarize)
+            source: Path or URL to the PDF file
+            pages: Specific pages to extract (optional)
+            max_length: Maximum length of summary per page (for summarize action)
+            
+        Returns:
+            Result of the PDF processing operation
+        """
+        self.logger.info("Executing PDF reader action: %s on %s", action, source)
+        
+        if action == "read":
+            return self.read_pdf(source, pages)
+        elif action == "extract_sections":
+            return self.extract_text_by_sections(source)
+        elif action == "summarize":
+            return self.summarize_pdf(source, max_length)
+        else:
+            self.logger.error("Invalid PDF reader action: %s", action)
+            return {"error": "Invalid PDF reader action: %s" % action}
     
     def __init__(self, max_pages: int = 50, extract_images: bool = False):
         """
@@ -29,6 +79,9 @@ class PDFReaderTool:
         self.logger = logging.getLogger(__name__)
         self.max_pages = max_pages
         self.extract_images = extract_images
+        
+        # Додаємо атрибут is_initialized для сумісності з smolagents 1.15.0
+        self.is_initialized = True
         
     def read_pdf(self, source: str, pages: Optional[Union[int, List[int], str]] = None) -> Dict[str, Any]:
         """
@@ -46,7 +99,7 @@ class PDFReaderTool:
             ValueError: If source is invalid
             RuntimeError: If PDF processing fails
         """
-        self.logger.info(f"Reading PDF from: {source}")
+        self.logger.info("Reading PDF from: %s", source)
         
         try:
             # Check if source is a URL or local file
@@ -62,8 +115,8 @@ class PDFReaderTool:
             return self._process_pdf(pdf_file, pages)
             
         except Exception as e:
-            self.logger.error(f"Error reading PDF: {str(e)}")
-            raise RuntimeError(f"Failed to read PDF: {str(e)}")
+            self.logger.error("Error reading PDF: %s", str(e))
+            raise RuntimeError("Failed to read PDF: %s" % str(e)) from e
             
     def _fetch_pdf_from_url(self, url: str) -> BytesIO:
         """
@@ -79,7 +132,7 @@ class PDFReaderTool:
             RuntimeError: If fetch fails
         """
         try:
-            self.logger.info(f"Fetching PDF from URL: {url}")
+            self.logger.info("Fetching PDF from URL: %s", url)
             
             # Request the PDF
             headers = {
@@ -93,15 +146,15 @@ class PDFReaderTool:
             # Check content type
             content_type = response.headers.get("Content-Type", "").lower()
             if "application/pdf" not in content_type:
-                self.logger.warning(f"URL {url} may not be a PDF: {content_type}")
+                self.logger.warning("URL %s may not be a PDF: %s", url, content_type)
                 
             # Create BytesIO object from content
             pdf_io = BytesIO(response.content)
             return pdf_io
             
         except requests.RequestException as e:
-            self.logger.error(f"Error fetching PDF from URL {url}: {str(e)}")
-            raise RuntimeError(f"Failed to fetch PDF from URL: {str(e)}")
+            self.logger.error("Error fetching PDF from URL %s: %s", url, str(e))
+            raise RuntimeError("Failed to fetch PDF from URL: %s" % str(e)) from e
             
     def _process_pdf(self, pdf_source: Union[str, BytesIO], pages: Optional[Union[int, List[int], str]] = None) -> Dict[str, Any]:
         """
@@ -311,8 +364,8 @@ class PDFReaderTool:
             return result
             
         except Exception as e:
-            self.logger.error(f"Error extracting sections from PDF: {str(e)}")
-            raise RuntimeError(f"Failed to extract sections: {str(e)}")
+            self.logger.error("Error extracting sections from PDF: %s", str(e))
+            raise RuntimeError("Failed to extract sections: %s" % str(e)) from e
         
     def summarize_pdf(self, source: str, max_length: int = 1000) -> Dict[str, Any]:
         """
@@ -397,5 +450,5 @@ class PDFReaderTool:
             return result
             
         except Exception as e:
-            self.logger.error(f"Error summarizing PDF: {str(e)}")
-            raise RuntimeError(f"Failed to summarize PDF: {str(e)}")
+            self.logger.error("Error summarizing PDF: %s", str(e))
+            raise RuntimeError("Failed to summarize PDF: %s" % str(e)) from e

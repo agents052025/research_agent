@@ -10,13 +10,68 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import io
+from smolagents import Tool
 
 
-class DataAnalysisTool:
-    """
+class DataAnalysisTool(Tool):
+    # Атрибути для smolagents.Tool
+    name = "data_analysis"
+    description = """
     Provides data analysis capabilities for research data.
     Supports statistical analysis, data cleaning, and transformation.
     """
+    inputs = {
+        "action": {
+            "type": "string",
+            "description": "Analysis action to perform (analyze_text, analyze_numerical, clean_data, extract_insights, compare_datasets)",
+        },
+        "data": {
+            "type": "object",
+            "description": "Data to analyze or process",
+        },
+        "options": {
+            "type": "object",
+            "description": "Optional parameters for the analysis",
+            "nullable": True
+        }
+    }
+    output_type = "object"
+    
+    def forward(self, action: str, data: Any, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Forward method required by smolagents.Tool.
+        Dispatches to appropriate analysis methods based on the action.
+        
+        Args:
+            action: Analysis action to perform
+            data: Data to analyze or process
+            options: Optional parameters for the analysis
+            
+        Returns:
+            Result of the analysis operation
+        """
+        self.logger.info("Executing analysis action: %s", action)
+        
+        if action == "analyze_text":
+            return self.analyze_text_data(data)
+        elif action == "analyze_numerical":
+            return self.analyze_numerical_data(data)
+        elif action == "clean_data":
+            return self.clean_data(data, options)
+        elif action == "extract_insights":
+            topic = options.get("topic") if options else None
+            return self.extract_insights(data, topic)
+        elif action == "compare_datasets":
+            dataset2 = options.get("dataset2") if options else None
+            labels = options.get("labels") if options else None
+            
+            if dataset2 is None:
+                return {"error": "Missing second dataset for comparison"}
+                
+            return self.compare_datasets(data, dataset2, labels)
+        else:
+            self.logger.error("Invalid analysis action: %s", action)
+            return {"error": "Invalid analysis action: %s" % action}
     
     def __init__(self, analysis_packages: List[str] = None):
         """
@@ -36,23 +91,63 @@ class DataAnalysisTool:
         
         for package in self.packages:
             if package not in self.available_packages:
-                self.logger.warning(f"Unsupported analysis package: {package}")
+                self.logger.warning("Unsupported analysis package: %s", package)
                 
-    def analyze_text_data(self, text_data: Union[str, List[str]]) -> Dict[str, Any]:
+        # Додаємо атрибут is_initialized для сумісності з smolagents 1.15.0
+        self.is_initialized = True
+                
+    def analyze_text_data(self, text_data: Any) -> Dict[str, Any]:
         """
         Analyze text data to extract basic statistics and insights.
         
         Args:
-            text_data: Text data as string or list of strings
+            text_data: Text data in various formats (string, list, dict, etc.)
             
         Returns:
             Dictionary containing analysis results
         """
         self.logger.info("Analyzing text data")
         
-        # Convert to list if string
+        # Convert various data types to text for analysis
         if isinstance(text_data, str):
             text_data = [text_data]
+        elif isinstance(text_data, dict):
+            # Extract values from dictionary or convert whole dict to string
+            try:
+                if all(isinstance(v, str) for v in text_data.values()):
+                    # If all values are strings, use them
+                    text_data = list(text_data.values())
+                else:
+                    # Convert the whole dictionary to a JSON string
+                    text_data = [json.dumps(text_data)]
+            except Exception as e:
+                self.logger.warning(f"Error converting dictionary to text: {e}")
+                text_data = [str(text_data)]
+        elif isinstance(text_data, list):
+            # Handle list of various types
+            if all(isinstance(item, str) for item in text_data):
+                # List of strings - keep as is
+                pass
+            elif all(isinstance(item, dict) for item in text_data):
+                # For lists of dictionaries, extract text from each dict
+                extracted_texts = []
+                for item in text_data:
+                    if 'snippet' in item:
+                        extracted_texts.append(item['snippet'])
+                    elif 'text' in item:
+                        extracted_texts.append(item['text'])
+                    elif 'title' in item:
+                        extracted_texts.append(item['title'])
+                    else:
+                        # Fallback to JSON string representation
+                        extracted_texts.append(json.dumps(item))
+                text_data = extracted_texts
+            else:
+                # Mixed list - convert each item to string
+                text_data = [str(item) for item in text_data]
+        else:
+            # For other types, convert to string
+            text_data = [str(text_data)]
             
         # Basic text statistics
         word_counts = [len(text.split()) for text in text_data]
@@ -78,7 +173,7 @@ class DataAnalysisTool:
                 score = self._calculate_readability(text)
                 readability_scores.append(score)
             except Exception as e:
-                self.logger.error(f"Error calculating readability: {str(e)}")
+                self.logger.error("Error calculating readability: %s", str(e))
                 readability_scores.append(None)
                 
         # Prepare result
@@ -330,15 +425,76 @@ class DataAnalysisTool:
         """
         self.logger.info(f"Extracting insights from data {f'on {topic}' if topic else ''}")
         
-        # Convert to DataFrame if not already
-        if not isinstance(data, pd.DataFrame):
-            try:
-                df = pd.DataFrame(data)
-            except Exception as e:
-                self.logger.error(f"Error converting data to DataFrame: {str(e)}")
-                return {"error": f"Could not convert data to analyzable format: {str(e)}"}
-        else:
+        # Check if data is None or empty
+        if data is None or data == []:
+            self.logger.warning("No data provided for analysis")
+            return {"error": "No data available for analysis", "insights": []}
+            
+        # Convert to DataFrame based on data type
+        if isinstance(data, pd.DataFrame):
             df = data.copy()
+        elif isinstance(data, dict):
+            # Handle dictionary data
+            try:
+                df = pd.DataFrame([data])
+            except Exception as e:
+                self.logger.warning(f"Could not convert dictionary to DataFrame: {str(e)}")
+                # Return formatted insights directly from dict
+                insights = []
+                for key, value in data.items():
+                    insights.append({"insight": key, "description": str(value)})
+                return {"insights": insights, "timestamp": datetime.now().isoformat()}
+        elif isinstance(data, list):
+            # Handle list data
+            if len(data) == 0:
+                return {"error": "Empty list provided", "insights": []}
+            
+            if all(isinstance(item, dict) for item in data):
+                try:
+                    df = pd.DataFrame(data)
+                except Exception as e:
+                    self.logger.error(f"Error converting list of dicts to DataFrame: {str(e)}")
+                    # Process list of dicts directly
+                    insights = []
+                    for item in data:
+                        for key, value in item.items():
+                            insights.append({"insight": key, "description": str(value)})
+                    return {"insights": insights, "timestamp": datetime.now().isoformat()}
+            else:
+                # Simple list of values
+                try:
+                    df = pd.DataFrame({"value": data})
+                except Exception as e:
+                    self.logger.error(f"Error converting list to DataFrame: {str(e)}")
+                    return {"error": f"Could not convert data to analyzable format: {str(e)}", "insights": []}
+        elif isinstance(data, str):
+            # Handle string data - likely a JSON or text to analyze
+            try:
+                # Try to parse as JSON first
+                json_data = json.loads(data)
+                if isinstance(json_data, dict):
+                    df = pd.DataFrame([json_data])
+                elif isinstance(json_data, list):
+                    df = pd.DataFrame(json_data)
+                else:
+                    # Create a simple text analysis DataFrame
+                    df = pd.DataFrame({"text": [data]})
+            except json.JSONDecodeError:
+                # Not JSON, treat as text
+                df = pd.DataFrame({"text": [data]})
+            except Exception as e:
+                self.logger.error(f"Error processing string data: {str(e)}")
+                return {"error": f"Could not process text data: {str(e)}", "insights": [{
+                    "insight": "Text Analysis", 
+                    "description": "Text data provided but could not be processed as structured data."
+                }]}
+        else:
+            # Other types
+            try:
+                df = pd.DataFrame([{"value": data}])
+            except Exception as e:
+                self.logger.error(f"Error converting unknown data type to DataFrame: {str(e)}")
+                return {"error": f"Unsupported data type: {type(data)}", "insights": []}
             
         insights = []
         numerical_columns = df.select_dtypes(include=np.number).columns
@@ -503,7 +659,7 @@ class DataAnalysisTool:
             try:
                 df1 = pd.DataFrame(dataset1)
             except Exception as e:
-                return {"error": f"Could not convert first dataset to DataFrame: {str(e)}"}
+                return {"error": "Could not convert first dataset to DataFrame: %s" % str(e)}
         else:
             df1 = dataset1.copy()
             
@@ -511,7 +667,7 @@ class DataAnalysisTool:
             try:
                 df2 = pd.DataFrame(dataset2)
             except Exception as e:
-                return {"error": f"Could not convert second dataset to DataFrame: {str(e)}"}
+                return {"error": "Could not convert second dataset to DataFrame: %s" % str(e)}
         else:
             df2 = dataset2.copy()
             

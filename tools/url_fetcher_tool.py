@@ -5,17 +5,32 @@ Fetches and processes content from web URLs.
 
 import logging
 import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 from bs4 import BeautifulSoup
 import validators
+from smolagents import Tool
 
 
-class URLFetcherTool:
-    """
+class URLFetcherTool(Tool):
+    # Атрибути для smolagents.Tool
+    name = "url_fetcher"
+    description = """
     Fetches and processes content from web URLs.
     Extracts main content, title, and metadata from web pages.
     """
+    inputs = {
+        "url": {
+            "type": "string",
+            "description": "URL to fetch content from",
+        },
+        "extract_content": {
+            "type": "boolean",
+            "description": "Whether to extract and process the main content",
+            "nullable": True
+        }
+    }
+    output_type = "object"
     
     def __init__(self, timeout: int = 30, max_size: int = 1048576, user_agent: Optional[str] = None):
         """
@@ -30,6 +45,23 @@ class URLFetcherTool:
         self.timeout = timeout
         self.max_size = max_size
         self.user_agent = user_agent or "Research Agent/1.0"
+        
+        # Додаємо атрибут is_initialized для сумісності з smolagents 1.15.0
+        self.is_initialized = True
+        
+    def forward(self, url: str, extract_content: bool = True) -> Dict[str, Any]:
+        """
+        Forward method required by smolagents.Tool.
+        Calls the fetch method to process the URL.
+        
+        Args:
+            url: URL to fetch content from
+            extract_content: Whether to extract and process the main content
+            
+        Returns:
+            Dictionary containing fetched content and metadata
+        """
+        return self.fetch(url, extract_content)
         
     def fetch(self, url: str, extract_content: bool = True) -> Dict[str, Any]:
         """
@@ -48,9 +80,9 @@ class URLFetcherTool:
         """
         # Validate URL
         if not validators.url(url):
-            raise ValueError(f"Invalid URL: {url}")
+            raise ValueError("Invalid URL: %s" % url)
             
-        self.logger.info(f"Fetching URL: {url}")
+        self.logger.info("Fetching URL: %s", url)
         
         try:
             # Prepare headers
@@ -61,10 +93,15 @@ class URLFetcherTool:
             }
             
             # Stream the request to handle large files
+            # Переконуємося, що timeout - це число, а не словник
+            timeout_value = 30  # Значення за замовчуванням
+            if isinstance(self.timeout, (int, float)):
+                timeout_value = self.timeout
+            
             response = requests.get(
                 url,
                 headers=headers,
-                timeout=self.timeout,
+                timeout=timeout_value,
                 stream=True
             )
             response.raise_for_status()
@@ -72,7 +109,7 @@ class URLFetcherTool:
             # Check content type
             content_type = response.headers.get("Content-Type", "").lower()
             if not content_type.startswith("text/html") and not "application/xhtml+xml" in content_type:
-                self.logger.warning(f"URL {url} is not HTML content: {content_type}")
+                self.logger.warning("URL %s is not HTML content: %s", url, content_type)
                 
                 # For non-HTML content, return basic metadata
                 return {
@@ -90,7 +127,7 @@ class URLFetcherTool:
             for chunk in response.iter_content(chunk_size=8192, decode_unicode=True):
                 content_size += len(chunk)
                 if content_size > self.max_size:
-                    self.logger.warning(f"Content size exceeds limit ({self.max_size} bytes)")
+                    self.logger.warning("Content size exceeds limit (%s bytes)", self.max_size)
                     break
                 content += chunk
                 
@@ -110,7 +147,7 @@ class URLFetcherTool:
             else:
                 result["raw_content"] = content
                 
-            self.logger.info(f"Successfully fetched URL: {url}")
+            self.logger.info("Successfully fetched URL: %s", url)
             return result
             
         except requests.RequestException as e:
@@ -198,7 +235,7 @@ class URLFetcherTool:
             }
             
         except Exception as e:
-            self.logger.error(f"Error processing HTML content: {str(e)}")
+            self.logger.error("Error processing HTML content: %s", str(e))
             return {
                 "title": "",
                 "description": "",

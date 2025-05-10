@@ -7,16 +7,40 @@ import os
 import json
 import sqlite3
 import logging
-from typing import Dict, List, Any, Optional, Union, Tuple
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
-from pathlib import Path
+from smolagents import Tool
 
 
-class DatabaseTool:
-    """
+class DatabaseTool(Tool):
+    # Атрибути для smolagents.Tool
+    name = "database"
+    description = """
     Manages data storage, retrieval, and caching for the research agent.
     Uses SQLite database for local storage.
     """
+    inputs = {
+        "action": {
+            "type": "string",
+            "description": "Database action to perform (store, get, find, delete)",
+        },
+        "key": {
+            "type": "string",
+            "description": "Key for data storage or retrieval",
+            "nullable": True
+        },
+        "value": {
+            "type": "object",
+            "description": "Value to store (for 'store' action)",
+            "nullable": True
+        },
+        "filters": {
+            "type": "object",
+            "description": "Filters for finding data (for 'find' action)",
+            "nullable": True
+        }
+    }
+    output_type = "object"
     
     def __init__(self, db_path: str = "data/research_data.db", 
                  cache_enabled: bool = True, cache_ttl: int = 86400):
@@ -39,6 +63,51 @@ class DatabaseTool:
         # Initialize database
         self._init_database()
         
+        # Додаємо атрибут is_initialized для сумісності з smolagents 1.15.0
+        self.is_initialized = True
+        
+    def forward(self, action: str, key: str = None, value: Any = None, filters: Dict[str, Any] = None) -> Any:
+        """
+        Forward method required by smolagents.Tool.
+        Dispatches to appropriate database methods based on the action.
+        
+        Args:
+            action: Database action to perform (store, get, find, delete, list_keys)
+            key: Key for data storage or retrieval
+            value: Value to store (for 'store' action)
+            filters: Filters for finding data (for 'find' action)
+            
+        Returns:
+            Result of the database operation
+        """
+        self.logger.info("Executing database action: %s", action)
+        
+        if action == "store" and key is not None and value is not None:
+            return self.store_data(key, value)
+        elif action == "get" and key is not None:
+            return self.get_data(key)
+        elif action == "delete" and key is not None:
+            return self.delete_data(key)
+        elif action == "find":
+            if key is not None:
+                # If key is provided, find by key pattern
+                return self.find_data_by_key_pattern(key)
+            elif filters is not None:
+                # If filters are provided, first try to find in research_data
+                data_results = self.find_data(filters)
+                if data_results:
+                    return data_results
+                # If no results found in research_data, try sources
+                return self.find_sources(filters)
+            else:
+                # If neither key nor filters are provided, return all data
+                return self.find_data({})
+        elif action == "list_keys":
+            return self.list_data_keys(key if key else None)  # key used as prefix if provided
+        else:
+            self.logger.error("Invalid database action or missing parameters")
+            return {"error": "Invalid database action or missing parameters"}
+    
     def _init_database(self) -> None:
         """Initialize the database schema if it doesn't exist."""
         try:
@@ -95,11 +164,11 @@ class DatabaseTool:
             conn.commit()
             conn.close()
             
-            self.logger.info(f"Database initialized at {self.db_path}")
+            self.logger.info("Database initialized at %s", self.db_path)
             
         except sqlite3.Error as e:
-            self.logger.error(f"Database initialization error: {str(e)}")
-            raise RuntimeError(f"Failed to initialize database: {str(e)}")
+            self.logger.error("Database initialization error: %s", str(e))
+            raise RuntimeError("Failed to initialize database: %s" % str(e)) from e
             
     def store_source(self, source: Dict[str, Any]) -> int:
         """
@@ -136,12 +205,12 @@ class DatabaseTool:
             conn.commit()
             conn.close()
             
-            self.logger.info(f"Stored source with ID {source_id}: {title}")
+            self.logger.info("Source stored with ID: %s", source_id)
             return source_id
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error storing source: {str(e)}")
-            raise RuntimeError(f"Failed to store source: {str(e)}")
+            self.logger.error("Error storing source: %s", str(e))
+            raise RuntimeError("Failed to store source: %s" % str(e)) from e
             
     def get_source(self, source_id: int) -> Optional[Dict[str, Any]]:
         """
@@ -178,8 +247,124 @@ class DatabaseTool:
             return source
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error retrieving source {source_id}: {str(e)}")
+            self.logger.error("Error retrieving source: %s", str(e))
             return None
+            
+    def find_data(self, filters: Dict[str, Any] = None, limit: int = 100) -> List[Any]:
+        """
+        Find data in the research_data table based on filters.
+        
+        Args:
+            filters: Dictionary of field-value pairs to filter by
+            limit: Maximum number of results to return
+            
+        Returns:
+            List of matching data items
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            query = "SELECT * FROM research_data"
+            params = []
+            
+            if filters and len(filters) > 0:
+                conditions = []
+                for field, value in filters.items():
+                    if field in ["key", "data_type", "timestamp"]:
+                        conditions.append(f"{field} LIKE ?")
+                        params.append(f"%{value}%")
+                        
+                if conditions:
+                    query += " WHERE " + " AND ".join(conditions)
+                    
+            query += f" ORDER BY timestamp DESC LIMIT {limit}"
+            
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            conn.close()
+            
+            # Convert to list of items
+            result_data = []
+            for row in rows:
+                data_dict = dict(row)
+                value_str, data_type = data_dict["value"], data_dict["data_type"]
+                
+                # Convert based on data type
+                if data_type == "json":
+                    try:
+                        result_data.append(json.loads(value_str))
+                    except json.JSONDecodeError:
+                        result_data.append(value_str)
+                elif data_type == "number":
+                    try:
+                        if "." in value_str:
+                            result_data.append(float(value_str))
+                        else:
+                            result_data.append(int(value_str))
+                    except ValueError:
+                        result_data.append(value_str)
+                elif data_type == "boolean":
+                    result_data.append(value_str.lower() == "true")
+                else:
+                    result_data.append(value_str)
+                
+            return result_data
+            
+        except sqlite3.Error as e:
+            self.logger.error("Error finding data: %s", str(e))
+            return []
+
+    def find_data_by_key_pattern(self, key_pattern: str, limit: int = 100) -> Dict[str, Any]:
+        """
+        Find data by key pattern and return as a dictionary.
+        
+        Args:
+            key_pattern: Pattern to match keys against
+            limit: Maximum number of results
+            
+        Returns:
+            Dictionary of matching key-value pairs
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+            SELECT key, value, data_type FROM research_data 
+            WHERE key LIKE ? ORDER BY timestamp DESC LIMIT ?
+            ''', (f"%{key_pattern}%", limit))
+            
+            rows = cursor.fetchall()
+            conn.close()
+            
+            result = {}
+            for key, value_str, data_type in rows:
+                # Convert based on data type
+                if data_type == "json":
+                    try:
+                        result[key] = json.loads(value_str)
+                    except json.JSONDecodeError:
+                        result[key] = value_str
+                elif data_type == "number":
+                    try:
+                        if "." in value_str:
+                            result[key] = float(value_str)
+                        else:
+                            result[key] = int(value_str)
+                    except ValueError:
+                        result[key] = value_str
+                elif data_type == "boolean":
+                    result[key] = value_str.lower() == "true"
+                else:
+                    result[key] = value_str
+            
+            return result
+            
+        except sqlite3.Error as e:
+            self.logger.error("Error finding data by key pattern: %s", str(e))
+            return {}
             
     def find_sources(self, filters: Dict[str, Any] = None, limit: int = 100) -> List[Dict[str, Any]]:
         """
@@ -233,7 +418,7 @@ class DatabaseTool:
             return sources
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error finding sources: {str(e)}")
+            self.logger.error("Error finding sources: %s", str(e))
             return []
             
     def cache_search_results(self, query: str, engine: str, results: Dict[str, Any]) -> bool:
@@ -283,11 +468,11 @@ class DatabaseTool:
             conn.commit()
             conn.close()
             
-            self.logger.info(f"Cached search results for query: {query}")
+            self.logger.info("Search results cached: %s - %s", query, engine)
             return True
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error caching search results: {str(e)}")
+            self.logger.error("Error caching search results: %s", str(e))
             return False
             
     def get_cached_search_results(self, query: str, engine: str) -> Optional[Dict[str, Any]]:
@@ -323,13 +508,13 @@ class DatabaseTool:
             
             # Check if expired
             if datetime.now() > datetime.fromisoformat(expires_at):
-                self.logger.info(f"Cache expired for query: {query}")
+                self.logger.info("Cache expired for query: %s", query)
                 return None
                 
             return json.loads(results)
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error retrieving cached search results: {str(e)}")
+            self.logger.error("Error retrieving cached search results: %s", str(e))
             return None
             
     def store_data(self, key: str, value: Any, data_type: str = None) -> bool:
@@ -391,11 +576,11 @@ class DatabaseTool:
             conn.commit()
             conn.close()
             
-            self.logger.info(f"Stored data with key: {key}")
+            self.logger.info("Data stored with key: %s", key)
             return True
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error storing data: {str(e)}")
+            self.logger.error("Error storing data: %s", str(e))
             return False
             
     def get_data(self, key: str) -> Optional[Any]:
@@ -441,7 +626,7 @@ class DatabaseTool:
                 return value_str
                 
         except sqlite3.Error as e:
-            self.logger.error(f"Error retrieving data: {str(e)}")
+            self.logger.error("Error retrieving data: %s", str(e))
             return None
             
     def delete_data(self, key: str) -> bool:
@@ -467,14 +652,14 @@ class DatabaseTool:
             conn.close()
             
             if deleted:
-                self.logger.info(f"Deleted data with key: {key}")
+                self.logger.info("Data deleted with key: %s", key)
             else:
-                self.logger.info(f"No data found with key: {key}")
+                self.logger.info("Data not found with key: %s", key)
                 
             return deleted
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error deleting data: {str(e)}")
+            self.logger.error("Error deleting data: %s", str(e))
             return False
             
     def list_data_keys(self, prefix: str = None) -> List[str]:
@@ -508,7 +693,7 @@ class DatabaseTool:
             return keys
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error listing data keys: {str(e)}")
+            self.logger.error("Error listing data keys: %s", str(e))
             return []
             
     def store_research_session(self, query: str, results: Dict[str, Any], sources: List[Dict[str, Any]]) -> int:
@@ -538,11 +723,11 @@ class DatabaseTool:
             conn.commit()
             conn.close()
             
-            self.logger.info(f"Stored research session with ID {session_id}: {query}")
+            self.logger.info("Research session stored with ID: %s: %s", session_id, query)
             return session_id
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error storing research session: {str(e)}")
+            self.logger.error("Error storing research session: %s", str(e))
             return -1
             
     def get_research_session(self, session_id: int) -> Optional[Dict[str, Any]]:
@@ -580,7 +765,7 @@ class DatabaseTool:
             return session
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error retrieving research session: {str(e)}")
+            self.logger.error("Error retrieving research session: %s", str(e))
             return None
             
     def find_research_sessions(self, query_contains: str = None, limit: int = 10) -> List[Dict[str, Any]]:
@@ -621,7 +806,7 @@ class DatabaseTool:
             return sessions
             
         except sqlite3.Error as e:
-            self.logger.error(f"Error finding research sessions: {str(e)}")
+            self.logger.error("Error finding research sessions: %s", str(e))
             return []
             
     def export_database(self, export_path: str) -> bool:
@@ -644,17 +829,17 @@ class DatabaseTool:
             conn = sqlite3.connect(self.db_path)
             
             # Export to the specified path
-            with open(export_path, 'w') as f:
+            with open(export_path, 'w', encoding='utf-8') as f:
                 for line in conn.iterdump():
-                    f.write(f"{line}\n")
+                    f.write("%s\n" % line)
                     
             conn.close()
             
-            self.logger.info(f"Database exported to {export_path}")
+            self.logger.info("Database exported to %s", export_path)
             return True
             
         except (sqlite3.Error, IOError) as e:
-            self.logger.error(f"Error exporting database: {str(e)}")
+            self.logger.error("Error exporting database: %s", str(e))
             return False
             
     def import_database(self, import_path: str, replace: bool = False) -> bool:
@@ -671,7 +856,7 @@ class DatabaseTool:
         try:
             # Check if import file exists
             if not os.path.exists(import_path):
-                self.logger.error(f"Import file not found: {import_path}")
+                self.logger.error("Import file not found: %s", import_path)
                 return False
                 
             if replace:
@@ -680,7 +865,7 @@ class DatabaseTool:
                     backup_path = f"{self.db_path}.backup-{datetime.now().strftime('%Y%m%d%H%M%S')}"
                     import shutil
                     shutil.copy2(self.db_path, backup_path)
-                    self.logger.info(f"Backed up existing database to {backup_path}")
+                    self.logger.info("Backed up existing database to %s", backup_path)
                     
                 # Remove the current database
                 if os.path.exists(self.db_path):
@@ -699,17 +884,17 @@ class DatabaseTool:
                 conn.executescript(sql_script)
                 conn.close()
                 
-                self.logger.info(f"Database imported from {import_path}")
+                self.logger.info("Database imported from %s", import_path)
                 return True
             else:
                 # Import into a temporary database
-                temp_db_path = f"{self.db_path}.temp"
+                temp_db_path = "%s.temp" % self.db_path
                 
                 # Create a new temporary database
                 temp_conn = sqlite3.connect(temp_db_path)
                 
                 # Import the SQL
-                with open(import_path, 'r') as f:
+                with open(import_path, 'r', encoding='utf-8') as f:
                     sql_script = f.read()
                     
                 temp_conn.executescript(sql_script)
@@ -743,7 +928,7 @@ class DatabaseTool:
                                 list(row_dict.values())
                             )
                     except sqlite3.Error as e:
-                        self.logger.warning(f"Error copying table {table}: {str(e)}")
+                        self.logger.warning("Error copying table %s: %s", table, str(e))
                         
                 main_conn.commit()
                 main_conn.close()
@@ -752,9 +937,9 @@ class DatabaseTool:
                 # Remove temporary database
                 os.remove(temp_db_path)
                 
-                self.logger.info(f"Database merged from {import_path}")
+                self.logger.info("Database merged from %s", import_path)
                 return True
                 
         except (sqlite3.Error, IOError) as e:
-            self.logger.error(f"Error importing database: {str(e)}")
+            self.logger.error("Error importing database: %s", str(e))
             return False

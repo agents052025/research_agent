@@ -28,6 +28,8 @@ STRINGS = {
         "results_analysis": "Analysis",
         "results_limitations": "Limitations and Uncertainties",
         "no_results": "No results were found for this query.",
+        "update_smolagents": "The agent requires tools compatible with smolagents 1.15.0.",
+        "update_smolagents_detailed": "The Research Agent is using smolagents 1.15.0, but the current tools are not compatible with this version. The tools need to be updated to inherit from the smolagents.Tool class. Please update the tools implementation to make them compatible with the new API.",
         
         # System prompts
         "system_prompt": """
@@ -75,6 +77,8 @@ Follow these guidelines:
         "results_analysis": "Аналіз",
         "results_limitations": "Обмеження та невизначеності",
         "no_results": "За цим запитом не знайдено результатів.",
+        "update_smolagents": "Агент потребує інструменти, сумісні з smolagents 1.15.0.",
+        "update_smolagents_detailed": "Дослідницький агент використовує smolagents 1.15.0, але поточні інструменти не сумісні з цією версією. Інструменти повинні бути оновлені, щоб успадковуватися від класу smolagents.Tool. Будь ласка, оновіть реалізацію інструментів, щоб вони були сумісні з новим API.",
         
         # System prompts
         "system_prompt": """

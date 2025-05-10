@@ -1,0 +1,6 @@
+{
+  "Summary of Findings": "The AI market in Ukraine has a projected growth with significant advancements in both the commercial and military sectors. The educational infrastructure supports AI development with a number of specialized programs.",
+  "Key Insights": "Document Count: 3\nTotal Words: 25\nAverage Words per Document: 8.333333333333334\nTop Words: ukraine's, it, shift:, from, outsourcing, to, innovation, -, digital, state, ua, https://digitalstate.gov.ua/news/it-outsourcing/ukraines-it-shift-from-outsourcing-to-innovation, as, of, 2023,, 106, specialized, ai, programs, were, available, at, 42, ukrainian, universities.\nReadability: Flesch Reading Ease: 41.85, Flesch Kincaid Grade: 10.15",
+  "Sources Used": "https://www.statista.com/outlook/tmo/artificial-intelligence/ukraine\nhttps://aihouse.org.ua/en/research/ai-ecosystem-of-ukraine-talent-companies-education/\nhttps://www.csis.org/analysis/understanding-military-ai-ecosystem-ukraine\nhttps://aim.unido.org/mapping-the-use-of-artificial-intelligence-in-ukraine/\nhttps://www.designrush.com/agency/ai-companies/ua",
+  "Limitations of the Research": "The research is limited by the availability of current data and may not fully capture the dynamic changes occurring due to political and economic factors."
+}

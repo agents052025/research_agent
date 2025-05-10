@@ -6,14 +6,23 @@ import os
 import json
 import logging
 import re
+import time
+from typing import Dict, List, Any, Optional, Callable
 from datetime import datetime
-from typing import Dict, List, Any, Callable, Optional
-from smolagents import CodeAgent, PythonInterpreterTool
-from smolagents.models import OpenAIServerModel
+from uuid import uuid4
 from rich.console import Console
 
+# Підключення smolagents
+from smolagents import LiteLLMModel, CodeAgent, Tool, PythonInterpreterTool
+
+# Імпорт внутрішніх модулів
 from core.research_planner import ResearchPlanner
 from core.context_manager import ContextManager
+from agent.simple_research_agent import SimpleResearchAgent
+import agent.improved_prompt as prompt_utils
+
+# We don't need any custom model class since we're using the standard OpenAI library 0.28.0 
+# which is compatible with smolagents
 from tools.search_tool import SearchAPITool
 from tools.url_fetcher_tool import URLFetcherTool
 from tools.pdf_reader_tool import PDFReaderTool
@@ -53,6 +62,33 @@ class ResearchAgent:
         # Initialize tools
         self._initialize_tools()
         
+        # Перевірка, чи всі інструменти є підкласами Tool
+        # Створення списку інструментів з правильною перевіркою типів
+        valid_tools = []
+        
+        # Додаємо інструменти тільки якщо вони є екземплярами Tool
+        for tool in [self.search_tool, self.url_fetcher_tool, self.pdf_reader_tool, 
+                    self.data_analysis_tool, self.visualization_tool, self.database_tool]:
+            if isinstance(tool, Tool) or issubclass(type(tool), Tool):
+                valid_tools.append(tool)
+            else:
+                self.logger.warning("Інструмент %s не є екземпляром Tool і не буде доданий", type(tool).__name__)
+                
+        # Додаємо PythonInterpreterTool
+        try:
+            python_tool = PythonInterpreterTool()
+            if isinstance(python_tool, Tool) or issubclass(type(python_tool), Tool):
+                valid_tools.append(python_tool)
+            else:
+                self.logger.warning("PythonInterpreterTool не є екземпляром Tool і не буде доданий")
+        except Exception as e:
+            self.logger.error("Помилка ініціалізації PythonInterpreterTool: %s", str(e))
+            
+        self.tools = valid_tools
+        
+        # Initialize the research planner
+        self.planner = ResearchPlanner(self.llm_config)
+        
         # Initialize the agent
         self.agent = self._initialize_agent()
     
@@ -61,54 +97,81 @@ class ResearchAgent:
         Initialize all the tools needed for research.
         """
         self.logger.info("Initializing research tools")
+        valid_tools = []
+        
+        # Initialize search tool
+        try:
+            search_config = self.config.get("tools", {}).get("search", {})
+            self.search_tool = SearchAPITool(search_config)
+            valid_tools.append(self.search_tool)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize SearchAPITool: {str(e)}")
+        
+        # Initialize URL fetcher tool
+        try:
+            url_config = self.config.get("tools", {}).get("url_fetcher", {})
+            self.url_fetcher_tool = URLFetcherTool(url_config)
+            valid_tools.append(self.url_fetcher_tool)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize URLFetcherTool: {str(e)}")
+        
+        # Initialize PDF reader tool
+        try:
+            pdf_config = self.config.get("tools", {}).get("pdf_reader", {})
+            self.pdf_reader_tool = PDFReaderTool(pdf_config)
+            valid_tools.append(self.pdf_reader_tool)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize PDFReaderTool: {str(e)}")
+        
+        # Initialize data analysis tool
+        try:
+            data_config = self.config.get("tools", {}).get("data_analysis", {})
+            self.data_analysis_tool = DataAnalysisTool(data_config)
+            valid_tools.append(self.data_analysis_tool)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize DataAnalysisTool: {str(e)}")
+        
+        # Initialize visualization tool
+        try:
+            viz_config = self.config.get("tools", {}).get("visualization", {})
+            self.visualization_tool = VisualizationTool(viz_config)
+            valid_tools.append(self.visualization_tool)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize VisualizationTool: {str(e)}")
+        
+        # Initialize database tool
+        try:
+            db_config = self.config.get("tools", {}).get("database", {})
+            db_path = db_config.get("path", "data/research_data.db")
+            cache_enabled = db_config.get("cache_enabled", True)
+            cache_ttl = db_config.get("cache_ttl", 86400)
+            self.database_tool = DatabaseTool(
+                db_path=db_path,
+                cache_enabled=cache_enabled,
+                cache_ttl=cache_ttl
+            )
+            valid_tools.append(self.database_tool)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize DatabaseTool: {str(e)}")
+        
+        # Initialize Python interpreter tool
+        try:
+            python_tool = PythonInterpreterTool()
+            valid_tools.append(python_tool)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize PythonInterpreterTool: {str(e)}")
+            
+        # Filter only tools that inherit from smolagents.Tool
+        self.tools = [tool for tool in valid_tools if isinstance(tool, Tool)]
         
     def _setup_tools(self):
         """
         Alias for _initialize_tools for compatibility with tests.
+        Returns the list of tools for testing.
         """
-        return self._initialize_tools()
-        # Initialize search tool
-        search_config = self.config.get("tools", {}).get("search", {})
-        self.search_tool = SearchAPITool(search_config)
+        self._initialize_tools()
+        return self.tools
         
-        # Initialize URL fetcher tool
-        url_config = self.config.get("tools", {}).get("url_fetcher", {})
-        self.url_fetcher_tool = URLFetcherTool(url_config)
-        
-        # Initialize PDF reader tool
-        pdf_config = self.config.get("tools", {}).get("pdf_reader", {})
-        self.pdf_reader_tool = PDFReaderTool(pdf_config)
-        
-        # Initialize data analysis tool
-        data_config = self.config.get("tools", {}).get("data_analysis", {})
-        self.data_analysis_tool = DataAnalysisTool(data_config)
-        
-        # Initialize visualization tool
-        viz_config = self.config.get("tools", {}).get("visualization", {})
-        self.visualization_tool = VisualizationTool(viz_config)
-        
-        # Initialize database tool
-        db_config = self.config.get("tools", {}).get("database", {})
-        db_path = db_config.get("path", "data/research_data.db")
-        cache_enabled = db_config.get("cache_enabled", True)
-        cache_ttl = db_config.get("cache_ttl", 86400)
-        self.database_tool = DatabaseTool(
-            db_path=db_path,
-            cache_enabled=cache_enabled,
-            cache_ttl=cache_ttl
-        )
-        
-        # Create a list of all tools
-        self.tools = [
-            self.search_tool,
-            self.url_fetcher_tool,
-            self.pdf_reader_tool,
-            self.data_analysis_tool,
-            self.visualization_tool,
-            self.database_tool,
-            PythonInterpreterTool()
-        ]
-    
     def _initialize_agent(self):
         """
         Initialize the agent with the necessary tools and configuration.
@@ -118,22 +181,36 @@ class ResearchAgent:
         """
         self.logger.info("Initializing research agent")
         
-        # Create an OpenAI model instance
-        # Get API key from config or environment variable
+        # Отримуємо OpenAI API ключ
         api_key = self.llm_config.get("api_key") or os.environ.get("OPENAI_API_KEY", "test_openai_key")
         
-        # Save the API key in the config for later use/assertions in tests
+        # Зберігаємо ключ API в конфігурації для подальшого використання
         if "api_key" not in self.llm_config:
             self.llm_config["api_key"] = api_key
-            
-        model = OpenAIServerModel(
-            model_id=self.llm_config["model"],
-            api_key=api_key,
-            temperature=self.llm_config.get("temperature", 0.7)
-        )
         
-        # Create a simple agent for testing
-        agent = CodeAgent(
+        # Отримуємо ID моделі
+        model_id = self.llm_config.get("model", "gpt-4")
+        
+        # Якщо проектний ключ OpenAI, додаємо префікс 'openai/'
+        if api_key.startswith("sk-proj-"):
+            prefixed_model_id = f"openai/{model_id}"
+            self.logger.info(f"Using OpenAI model via LiteLLM with project key: {prefixed_model_id}")
+            model = LiteLLMModel(
+                model_id=prefixed_model_id,  # Додаємо префікс 'openai/' до назви моделі
+                api_key=api_key,
+                temperature=self.llm_config.get("temperature", 0.7)
+            )
+        else:
+            # Для звичайних ключів також використовуємо LiteLLM для єдності коду
+            self.logger.info(f"Using OpenAI model via LiteLLM: {model_id}")
+            model = LiteLLMModel(
+                model_id=model_id,
+                api_key=api_key,
+                temperature=self.llm_config.get("temperature", 0.7)
+            )
+        
+        # Create a simple agent with improved prompting
+        agent = prompt_utils.create_agent_with_improved_prompt(
             tools=self.tools,
             model=model
         )
@@ -169,6 +246,11 @@ class ResearchAgent:
         code = '''
 # Приклад коду для дослідження ринку смартфонів в Україні
 import json
+import logging
+
+# Налаштування логування
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Ініціалізація результатів дослідження
 research_results = {
@@ -179,7 +261,7 @@ research_results = {
 
 # Крок 1: Збір інформації
 def gather_information():
-    print("Збір інформації з різних джерел...")
+    logger.info("Збір інформації з різних джерел...")
     
     # Тут буде код для пошуку в Інтернеті, читання PDF, аналізу даних тощо
     
@@ -197,7 +279,7 @@ def gather_information():
 
 # Крок 2: Аналіз даних
 def analyze_data(gathered_info):
-    print("Аналіз зібраних даних...")
+    logger.info("Аналіз зібраних даних...")
     
     # Тут буде код для аналізу зібраної інформації
     
@@ -221,7 +303,7 @@ def analyze_data(gathered_info):
 
 # Крок 3: Синтез та генерація звіту
 def generate_report(analysis_results, gathered_info):
-    print("Синтез результатів та створення звіту...")
+    logger.info("Синтез результатів та створення звіту...")
     
     # Створення комплексного звіту на основі плану дослідження
     # Включення всіх необхідних цитат та посилань
@@ -282,12 +364,12 @@ def generate_report(analysis_results, gathered_info):
 try:
     # Збір інформації
     gathered_info = gather_information()
-    print(f"Зібрано джерел: {len(gathered_info.get('sources', []))}")
+    logger.info("Зібрано джерел: %s", len(gathered_info.get('sources', [])))
     
     # Аналіз даних
     if gathered_info["success"]:
         analysis_results = analyze_data(gathered_info)
-        print(f"Знайдено інсайтів: {len(analysis_results.get('insights', []))}")
+        logger.info("Знайдено інсайтів: %s", len(analysis_results.get('insights', [])))
         
         # Генерація звіту
         if analysis_results["success"]:
@@ -300,12 +382,12 @@ try:
             research_results["sources"] = gathered_info["sources"]
             research_results["findings"] = analysis_results["insights"]
             
-            print("Дослідження завершено успішно.")
+            logger.info("Дослідження завершено успішно.")
     
     # Повернення результатів дослідження
-    print(json.dumps(research_results, indent=2))
+    logger.info("Результати дослідження: %s", json.dumps(research_results, indent=2))
 except Exception as e:
-    print(f"Помилка під час дослідження: {str(e)}")
+    logger.error("Помилка під час дослідження: %s", str(e))
     research_results["error"] = str(e)
 
 # Повернення результатів
@@ -321,104 +403,42 @@ research_results
             agent_results: Raw output from the agent
             query: Original research query
             timestamp: Timestamp when research was conducted
+                except (ValueError, KeyError, TypeError, AttributeError) as e:
+                    self.logger.warning("Error enhancing non-dict report: %s", str(e))
             
-        Returns:
-            Formatted research results dictionary
-        """
-        # У новій версії smolagents, результати повертаються в іншому форматі
-        # Спробуємо витягнути результати з різних можливих місць
-        research_results = {}
-        
-        # Для сумісності з тестами - перевіряємо формат результатів тестів
-        if agent_results and isinstance(agent_results, dict) and 'result' in agent_results:
-            result = agent_results['result']
-            if isinstance(result, dict) and 'summary' in result and 'full_report' in result:
-                return result
-        
-        # Перевіряємо, чи є 'final_answer' в результатах
-        if agent_results and isinstance(agent_results, dict):
-            # Спочатку перевіряємо, чи є 'final_answer' в результатах
-            if 'final_answer' in agent_results:
-                # Спробуємо розпарсити JSON з final_answer
-                try:
-                    import json
-                    final_answer = agent_results['final_answer']
-                    if isinstance(final_answer, str) and '{' in final_answer and '}' in final_answer:
-                        # Витягуємо JSON з тексту
-                        json_start = final_answer.find('{')
-                        json_end = final_answer.rfind('}') + 1
-                        json_str = final_answer[json_start:json_end]
-                        research_results = json.loads(json_str)
-                    elif isinstance(final_answer, dict):
-                        research_results = final_answer
-                except Exception as e:
-                    self.logger.error("Error parsing final_answer as JSON: %s", str(e))
-            # Якщо не вдалося отримати результати з final_answer, шукаємо в інших місцях
-            if not research_results and 'logs' in agent_results:
-                # Шукаємо в логах рядки, що містять JSON
-                logs = agent_results['logs']
-                if isinstance(logs, list):
-                    for log in logs:
-                        if isinstance(log, str) and '{' in log and '}' in log:
-                            try:
-                                import json
-                                # Витягуємо JSON з тексту
-                                json_start = log.find('{')
-                                json_end = log.rfind('}') + 1
-                                json_str = log[json_start:json_end]
-                                parsed = json.loads(json_str)
-                                if parsed and isinstance(parsed, dict) and 'summary' in parsed and 'full_report' in parsed:
-                                    research_results = parsed
-                                    break
-                            except Exception as e:
-                                continue
-        
-        # Якщо все ще немає результатів, створюємо порожній результат
-        if not research_results:
             research_results = {
                 "query": query,
                 "timestamp": timestamp,
-                "summary": get_string("no_results", self.language),
-                "full_report": get_string("no_results", self.language)
+                "summary": f"Дослідження за запитом '{query}' завершено.",
+                "full_report": report,
+                "section_titles": {
+                    "summary": get_string("results_summary", self.language),
+                    "full_report": get_string("results_full", self.language),
+                    "sources": get_string("results_sources", self.language),
+                    "findings": get_string("results_findings", self.language),
+                    "analysis": get_string("results_analysis", self.language),
+                    "limitations": get_string("results_limitations", self.language)
+                }
             }
         
-        # Переконуємося, що всі очікувані поля присутні
-        if "query" not in research_results:
-            research_results["query"] = query
-            
-        if "timestamp" not in research_results:
-            research_results["timestamp"] = timestamp
-            
-        if "summary" not in research_results or not research_results["summary"]:
-            research_results["summary"] = get_string("no_results", self.language)
-            
-        if "full_report" not in research_results or not research_results["full_report"]:
-            research_results["full_report"] = get_string("no_results", self.language)
-            
-        # Додаємо локалізовані заголовки розділів
-        research_results["section_titles"] = {
-            "summary": get_string("results_summary", self.language),
-            "full_report": get_string("results_full", self.language),
-            "sources": get_string("results_sources", self.language),
-            "findings": get_string("results_findings", self.language),
-            "analysis": get_string("results_analysis", self.language),
-            "limitations": get_string("results_limitations", self.language)
-        }
+        # Store results in context
+        # Add compatibility with tests
+        if hasattr(self.context, 'add_results'):
+            self.context.add_results(research_results)
+        else:
+            # Fallback for older versions of ContextManager
+            if not hasattr(self.context, 'results'):
+                self.context.results = []
+            self.context.results.append(research_results)
         
+        # Return formatted results
         return research_results
     
-    def process_query(self, query: str) -> Dict[str, Any]:
-        """
-        Process a research query and return results.
-        
-        Args:
-            query: Research query to process
-            
-        Returns:
-            Dictionary containing research results
-        """
-        self.logger.info("Processing research query: %s", query)
-        self.console.print(get_string("processing_query", self.language))
+    except Exception as e:
+        self.logger.error("Error formatting results: %s", str(e))
+        # Fallback для безпечного повернення
+        return {
+            "query": query,
         
         # Detect language if not specified
         detected_lang = self.detect_language(query)
@@ -426,45 +446,96 @@ research_results
             self.logger.info("Detected language: %s, switching from %s", detected_lang, self.language)
             self.language = detected_lang
         
-        # Generate timestamp
-        timestamp = datetime.now().isoformat()
+        # Create a research plan
+        # Зауваження: метод create_plan не приймає аргумент language
+        plan = self.planner.create_plan(query)
         
-        # Store query in context
-        # Add compatibility with tests
-        if hasattr(self.context, 'add_query'):
-            self.context.add_query(query, timestamp)
-        else:
-            # Fallback for older versions of ContextManager
-            if not hasattr(self.context, 'queries'):
-                self.context.queries = []
-            self.context.queries.append({"query": query, "timestamp": timestamp})
+        # Create task data for the execution
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Generate research code
+        # Get research code (default or custom)
         research_code = self._generate_sample_research_code()
         
-        # Create a task for the agent
+        # Create task data - ensure all values are proper types
         task = {
-            "query": query,
-            "language": self.language,
+            "id": timestamp.replace(" ", "_").replace(":", ""),
+            "query": str(query) if query else "",  # Ensure query is a string
+            "language": str(self.language) if self.language else "uk",  # Ensure language is a string
             "timestamp": timestamp,
-            "code": research_code
+            "code": research_code,
+            "plan": plan
         }
+        
+        # Debug output for task data
+        self.logger.info("Task data types: id=%s, query=%s, language=%s, timestamp=%s, code=%s, plan=%s", 
+                       type(task["id"]), type(task["query"]), type(task["language"]), 
+                       type(task["timestamp"]), type(task["code"]), type(task["plan"]))
         
         # Execute the research task
         try:
-            # Execute the research task using the agent
-            agent_results = self.agent.execute_task(task)
+            # Використовуємо реальний агент для виконання завдань
+            self.logger.info("Запуск реального дослідницького процесу з використанням smolagents 1.15.0 API")
             
-            # Format the results
-            research_results = self._format_results(agent_results, query, timestamp)
+            # Перевіряємо доступні інструменти
+            available_tools = [t.__class__.__name__ for t in self.tools]
+            self.logger.info(f"Available tools: {', '.join(available_tools)}")
             
-            # Store results in context
-            self.context.add_results(research_results)
+            # Підготовка задачі для виконання
+            research_instructions = f"""
+            You are a research assistant conducting a thorough investigation on: '{query}'.
+            Follow this research plan: {plan}
             
-            # Return formatted results
-            return research_results
+            Provide comprehensive results including:
+            1. Summary of findings
+            2. Key insights 
+            3. Sources used (with URLs)
+            4. Limitations of the research
+            
+            Be detailed, factual, and cite your sources.
+            """
+            
+            # Підготовка загальних даних запиту
+            total_steps = len(plan["steps"])
+            current_step = 1
+            
+            # Дамо можливість агенту виконати дослідження з використанням доступних інструментів
+            # Тут можна було б виконати по-крокове виконання з викликами окремих інструментів,
+            # але ми дамо агенту можливість вибрати потрібні інструменти самостійно
+            
+            # Агент з підтримкою прогресу
+            def progress_tracker(percent):
+                # Оновлюємо прогрес виконання
+                if progress_callback:
+                    # Прогрес може бути невідомим, тому ми оцінюємо його на основі кроків
+                    # Якщо відсоток прогресу не приходить, обчислюємо його
+                    if percent > 0:
+                        progress_callback(percent)
+                    else:
+                        # Поступове відображення прогресу
+                        nonlocal current_step
+                        progress = (current_step / total_steps) * 100
+                        progress_callback(progress)
+                        current_step += 1
+            
+            # Виконуємо запит через агент
+            try:
+                # Спробуємо з використанням progress_callback
+                agent_results = self.agent.run(
+                    research_instructions,
+                    progress_callback=progress_tracker
+                )
+            except TypeError:
+                # Якщо метод не підтримує progress_callback
+                self.logger.info("Run не підтримує progress_callback, виконуємо без нього")
+                # Запускаємо без progress_callback
+                agent_results = self.agent.run(research_instructions)
+                
+            # Форматуємо результати дослідження
+            formatted_results = self._format_results(agent_results, query, timestamp)
+            return formatted_results
+            
         except Exception as e:
-            self.logger.error(f"Error processing query: {str(e)}")
+            self.logger.error("Error processing research query: %s", str(e))
             return {
                 "query": query,
                 "timestamp": timestamp,

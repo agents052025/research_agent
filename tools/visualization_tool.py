@@ -8,13 +8,91 @@ from typing import Dict, List, Any, Optional, Union, Tuple
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from smolagents import Tool
 
 
-class VisualizationTool:
-    """
+class VisualizationTool(Tool):
+    # Атрибути для smolagents.Tool
+    name = "visualization"
+    description = """
     Creates terminal-friendly visualizations from data.
     Supports tables, bar charts, histograms, and other visualizations.
     """
+    inputs = {
+        "action": {
+            "type": "string",
+            "description": "Visualization type to create (table, bar_chart, histogram, line_chart, scatter_plot)",
+        },
+        "data": {
+            "type": "object",
+            "description": "Data to visualize",
+        },
+        "options": {
+            "type": "object",
+            "description": "Visualization options (title, headers, labels, etc.)",
+            "nullable": True
+        }
+    }
+    output_type = "object"
+    
+    def forward(self, action: str, data: Any, options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Forward method required by smolagents.Tool.
+        Dispatches to appropriate visualization methods based on the action.
+        
+        Args:
+            action: Visualization type to create
+            data: Data to visualize
+            options: Visualization options
+            
+        Returns:
+            Result of the visualization operation
+        """
+        self.logger.info("Creating %s visualization", action)
+        options = options or {}
+        
+        if action == "table":
+            return self.create_table(
+                data=data,
+                headers=options.get("headers"),
+                title=options.get("title")
+            )
+        elif action == "bar_chart":
+            return self.create_bar_chart(
+                data=data,
+                labels=options.get("labels"),
+                title=options.get("title"),
+                sort=options.get("sort", False),
+                max_items=options.get("max_items", 20)
+            )
+        elif action == "histogram":
+            return self.create_histogram(
+                data=data,
+                bins=options.get("bins", 10),
+                title=options.get("title")
+            )
+        elif action == "line_chart":
+            return self.create_line_chart(
+                y_values=data,
+                x_values=options.get("x_values"),
+                title=options.get("title"),
+                y_label=options.get("y_label"),
+                x_label=options.get("x_label"),
+                height=options.get("height", 15)
+            )
+        elif action == "scatter_plot":
+            return self.create_scatter_plot(
+                x_values=options.get("x_values"),
+                y_values=data,
+                title=options.get("title"),
+                x_label=options.get("x_label"),
+                y_label=options.get("y_label"),
+                height=options.get("height", 15),
+                width=options.get("width", 40)
+            )
+        else:
+            self.logger.error("Invalid visualization type: %s", action)
+            return {"error": "Invalid visualization type: %s" % action}
     
     def __init__(self, max_width: int = 80, use_unicode: bool = True):
         """
@@ -27,6 +105,9 @@ class VisualizationTool:
         self.logger = logging.getLogger(__name__)
         self.max_width = max_width
         self.use_unicode = use_unicode
+        
+        # Додаємо атрибут is_initialized для сумісності з smolagents 1.15.0
+        self.is_initialized = True
         
         # Set up Unicode characters for visualizations
         if self.use_unicode:
@@ -183,7 +264,8 @@ class VisualizationTool:
         
         # Add truncation note if needed
         if truncated:
-            truncate_msg = f"Note: Showing first 1000 rows of {len(df)} total rows".center(len(h_line))
+            truncate_msg = "Note: Showing first 1000 rows of %d total rows" % len(df)
+            truncate_msg = truncate_msg.center(len(h_line))
             table_lines.append(truncate_msg)
             
         # Join lines to create final table
@@ -227,7 +309,8 @@ class VisualizationTool:
                 if labels and len(labels) >= len(data):
                     items = list(zip(labels, data))
                 else:
-                    items = list(zip([f"Item {i+1}" for i in range(len(data))], data))
+                    item_labels = ["Item %d" % (i+1) for i in range(len(data))]
+                    items = list(zip(item_labels, data))
             elif all(isinstance(x, tuple) and len(x) == 2 for x in data):
                 items = data
             else:
@@ -247,7 +330,18 @@ class VisualizationTool:
             truncated = False
             
         # Find the maximum value and label length
-        max_value = max(abs(x[1]) for x in items)
+        # Ensure numerical values for max calculation, convert strings to length if needed
+        max_value = 0
+        for _, val in items:
+            if isinstance(val, (int, float)):
+                max_value = max(max_value, abs(val))
+            elif isinstance(val, str):
+                # For string values, use string length or a default value
+                max_value = max(max_value, len(val))
+            else:
+                # For other types, convert to string and use length
+                max_value = max(max_value, len(str(val)))
+                
         max_label_len = max(len(str(x[0])) for x in items)
         
         # Calculate bar width based on max value and terminal width
@@ -282,19 +376,19 @@ class VisualizationTool:
                 
             # Format value
             if abs(value) >= 1000000:
-                value_str = f"{value/1000000:.1f}M"
+                value_str = "%.1fM" % (value/1000000)
             elif abs(value) >= 1000:
-                value_str = f"{value/1000:.1f}K"
+                value_str = "%.1fK" % (value/1000)
             else:
-                value_str = f"{value:.1f}" if isinstance(value, float) else str(value)
+                value_str = "%.1f" % value if isinstance(value, float) else str(value)
                 
             # Combine components
-            chart_lines.append(f"{label_str} {bar} {value_str}")
+            chart_lines.append("%s %s %s" % (label_str, bar, value_str))
             
         # Add truncation note if needed
         if truncated:
             chart_lines.append("")
-            chart_lines.append(f"Note: Showing {max_items} of {len(data)} items")
+            chart_lines.append("Note: Showing %d of %d items" % (max_items, len(data)))
             
         # Join lines to create final chart
         chart_str = "\n".join(chart_lines)
@@ -336,14 +430,15 @@ class VisualizationTool:
         values = values[~np.isnan(values)]
         
         if len(values) == 0:
+            self.logger.error("No valid data points for histogram")
             return {"error": "No valid data points for histogram"}
             
         # Calculate histogram
         try:
             hist, bin_edges = np.histogram(values, bins=bins)
         except Exception as e:
-            self.logger.error(f"Error calculating histogram: {str(e)}")
-            return {"error": f"Failed to calculate histogram: {str(e)}"}
+            self.logger.error("Error calculating histogram: %s", str(e))
+            return {"error": "Failed to calculate histogram: %s" % str(e)}
             
         # Find the maximum count for scaling
         max_count = max(hist)
@@ -354,11 +449,11 @@ class VisualizationTool:
             start = bin_edges[i]
             end = bin_edges[i + 1]
             if abs(start) >= 1000000 or abs(end) >= 1000000:
-                label = f"{start/1000000:.1f}M-{end/1000000:.1f}M"
+                label = "%.1fM-%.1fM" % (start/1000000, end/1000000)
             elif abs(start) >= 1000 or abs(end) >= 1000:
-                label = f"{start/1000:.1f}K-{end/1000:.1f}K"
+                label = "%.1fK-%.1fK" % (start/1000, end/1000)
             else:
-                label = f"{start:.1f}-{end:.1f}"
+                label = "%.1f-%.1f" % (start, end)
             bin_labels.append(label)
             
         # Calculate bar width based on terminal width
@@ -384,16 +479,16 @@ class VisualizationTool:
             bar = self.chars["bar_h"] * bar_length
             
             # Combine components
-            hist_lines.append(f"{label} {bar} {count}")
+            hist_lines.append("%s %s %d" % (label, bar, count))
             
         # Add summary statistics
         hist_lines.append("")
-        hist_lines.append(f"Total values: {len(values)}")
-        hist_lines.append(f"Min: {np.min(values):.2f}")
-        hist_lines.append(f"Max: {np.max(values):.2f}")
-        hist_lines.append(f"Mean: {np.mean(values):.2f}")
-        hist_lines.append(f"Median: {np.median(values):.2f}")
-        hist_lines.append(f"Std Dev: {np.std(values):.2f}")
+        hist_lines.append("Total values: %d" % len(values))
+        hist_lines.append("Min: %.2f" % np.min(values))
+        hist_lines.append("Max: %.2f" % np.max(values))
+        hist_lines.append("Mean: %.2f" % np.mean(values))
+        hist_lines.append("Median: %.2f" % np.median(values))
+        hist_lines.append("Std Dev: %.2f" % np.std(values))
         
         # Join lines to create final histogram
         hist_str = "\n".join(hist_lines)
@@ -526,7 +621,7 @@ class VisualizationTool:
                 
             # Add y label and row
             y_label_str = y_str.rjust(8)
-            chart_lines.append(f"{y_label_str} {''.join(row)}")
+            chart_lines.append("%s %s" % (y_label_str, ''.join(row)))
             
         # Add x-axis
         x_axis = "─" * chart_width if self.use_unicode else "-" * chart_width
@@ -566,7 +661,7 @@ class VisualizationTool:
         # Add sampling note if needed
         if sampled:
             chart_lines.append("")
-            chart_lines.append(f"Note: Data sampled to fit chart width (showing {len(y_data)} of {len(y_values)} points)")
+            chart_lines.append("Note: Data sampled to fit chart width (showing %d of %d points)" % (len(y_data), len(y_values)))
             
         # Join lines to create final chart
         chart_str = "\n".join(chart_lines)
@@ -675,7 +770,7 @@ class VisualizationTool:
                 
             # Add y label and row
             y_label_str = y_str.rjust(8)
-            plot_lines.append(f"{y_label_str} {''.join(row)}")
+            plot_lines.append("%s %s" % (y_label_str, ''.join(row)))
             
         # Add x-axis
         x_axis = "─" * width if self.use_unicode else "-" * width
@@ -693,11 +788,11 @@ class VisualizationTool:
             
             # Format x value
             if abs(x_value) >= 1000000:
-                x_str = f"{x_value/1000000:.1f}M"
+                x_str = "%.1fM" % (x_value/1000000)
             elif abs(x_value) >= 1000:
-                x_str = f"{x_value/1000:.1f}K"
+                x_str = "%.1fK" % (x_value/1000)
             else:
-                x_str = f"{x_value:.1f}"
+                x_str = "%.1f" % x_value
                 
             x_labels += " " * (pos - len(x_labels)) + x_str
             
@@ -714,7 +809,7 @@ class VisualizationTool:
             
         # Add data info
         plot_lines.append("")
-        plot_lines.append(f"Points: {len(x_data)}")
+        plot_lines.append("Points: %d" % len(x_data))
         
         # Join lines to create final plot
         plot_str = "\n".join(plot_lines)

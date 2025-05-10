@@ -1,15 +1,19 @@
 {
   "llm": {
     "provider": "openai",
-    "model": "gpt-4",
+    "model": "gpt-4-turbo",
     "temperature": 0.7
   },
   "tools": {
     "search": {
       "enabled": true,
-      "api_key_env": "SERPAPI_API_KEY",
-      "engine": "google",
-      "max_results": 10
+      "api_key_env": "BRAVESEARCH_API_KEY",
+      "engine": "brave",
+      "max_results": 10,
+      "fallback": {
+        "api_key_env": "SERPER_API_KEY",
+        "engine": "serper"
+      }
     },
     "url_fetcher": {
       "enabled": true,
