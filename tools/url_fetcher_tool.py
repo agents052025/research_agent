@@ -57,7 +57,7 @@ class URLFetcherTool:
             headers = {
                 "User-Agent": self.user_agent,
                 "Accept": "text/html,application/xhtml+xml,application/xml",
-                "Accept-Language": "en-US,en;q=0.9"
+                "Accept-Language": "uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7"
             }
             
             # Stream the request to handle large files
@@ -79,8 +79,6 @@ class URLFetcherTool:
                     "url": url,
                     "status_code": response.status_code,
                     "content_type": content_type,
-                    "title": "",
-                    "content": "",
                     "headers": dict(response.headers),
                     "timestamp": datetime.now().isoformat(),
                     "is_html": False

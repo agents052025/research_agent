@@ -8,8 +8,10 @@ import logging
 import re
 from datetime import datetime
 from typing import Dict, List, Any, Callable, Optional, Union
-from smolagents import CodeAgent, PythonInterpreterTool
+
+from smolagents import CodeAgent
 from smolagents.models import OpenAIServerModel
+from smolagents.tools import PythonInterpreterTool
 from rich.console import Console
 
 from core.research_planner import ResearchPlanner
@@ -84,14 +86,7 @@ class ResearchAgent:
         
         # Initialize database tool
         db_config = self.config.get("tools", {}).get("database", {})
-        db_path = db_config.get("path", "data/research_data.db")
-        cache_enabled = db_config.get("cache_enabled", True)
-        cache_ttl = db_config.get("cache_ttl", 86400)
-        self.database_tool = DatabaseTool(
-            db_path=db_path,
-            cache_enabled=cache_enabled,
-            cache_ttl=cache_ttl
-        )
+        self.database_tool = DatabaseTool(db_config)
         
         # Create a list of all tools
         self.tools = [
@@ -114,16 +109,9 @@ class ResearchAgent:
         self.logger.info("Initializing research agent")
         
         # Create an OpenAI model instance
-        # Get API key from config or environment variable
-        api_key = self.llm_config.get("api_key") or os.environ.get("OPENAI_API_KEY", "test_openai_key")
-        
-        # Save the API key in the config for later use/assertions in tests
-        if "api_key" not in self.llm_config:
-            self.llm_config["api_key"] = api_key
-            
         model = OpenAIServerModel(
             model_id=self.llm_config["model"],
-            api_key=api_key,
+            api_key=self.llm_config["api_key"],
             temperature=self.llm_config.get("temperature", 0.7)
         )
         
