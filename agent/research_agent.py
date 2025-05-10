@@ -747,8 +747,58 @@ research_results
                 filename = f"res_{safe_query}_{timestamp.replace(' ', '_').replace(':', '')}.txt"
                 
                 try:
+                    # Підготовка вмісту для збереження у файл
+                    if "full_report" in formatted_results:
+                        # Перевіряємо тип даних full_report та відповідно його обробляємо
+                        if isinstance(formatted_results["full_report"], str):
+                            report_content = formatted_results["full_report"]
+                        elif isinstance(formatted_results["full_report"], dict):
+                            try:
+                                # Якщо це словник, конвертуємо його в JSON рядок
+                                report_content = json.dumps(formatted_results["full_report"], ensure_ascii=False, indent=2)
+                            except (TypeError, ValueError) as e:
+                                self.logger.warning(f"Помилка при конвертації словника у JSON: {str(e)}")
+                                # Якщо не вдалося конвертувати в JSON, використовуємо стрінгове представлення
+                                report_content = str(formatted_results["full_report"])
+                        elif isinstance(formatted_results["full_report"], list):
+                            try:
+                                # Якщо це список, спробуємо конвертувати в JSON
+                                report_content = json.dumps(formatted_results["full_report"], ensure_ascii=False, indent=2)
+                            except (TypeError, ValueError) as e:
+                                self.logger.warning(f"Помилка при конвертації списку у JSON: {str(e)}")
+                                # Якщо не вдалося, з'єднуємо елементи списку в текст
+                                report_content = "\n".join([str(item) for item in formatted_results["full_report"]])
+                        else:
+                            # Для будь-яких інших типів даних, конвертуємо в рядок
+                            report_content = str(formatted_results["full_report"])
+                    else:
+                        # Якщо full_report відсутній, спробуємо використати інші ключі, які можуть містити вміст звіту
+                        if "summary" in formatted_results and formatted_results["summary"]:
+                            report_parts = []
+                            if formatted_results["summary"]:
+                                report_parts.append(f"Summary: {formatted_results['summary']}\n")
+                            if "key_insights" in formatted_results and formatted_results["key_insights"]:
+                                report_parts.append(f"Key Insights: {formatted_results['key_insights']}\n")
+                            if "sources" in formatted_results and formatted_results["sources"]:
+                                report_parts.append(f"Sources: {formatted_results['sources']}\n")
+                            report_content = "\n".join(report_parts)
+                        else:
+                            # Якщо немає основних ключів для структурованого звіту, використовуємо весь результат
+                            try:
+                                report_content = json.dumps(formatted_results, ensure_ascii=False, indent=2)
+                            except (TypeError, ValueError) as e:
+                                self.logger.warning(f"Помилка при конвертації результатів у JSON: {str(e)}")
+                                # Якщо не вдалося конвертувати в JSON, використовуємо стрінгове представлення
+                                report_content = str(formatted_results)
+                    
+                    # Переконуємося, що report_content є рядком перед записом у файл
+                    if not isinstance(report_content, str):
+                        report_content = str(report_content)
+                        
+                    # Записуємо вміст у файл
                     with open(filename, "w", encoding="utf-8") as f:
-                        f.write(formatted_results["full_report"])
+                        f.write(report_content)
+                    
                     self.logger.info(f"Results saved to file: {filename}")
                     formatted_results["report_file"] = filename
                 except Exception as e:

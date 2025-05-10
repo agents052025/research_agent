@@ -66,8 +66,18 @@ class ResultsEnhancer:
         
         # Формуємо розширені Key Insights, якщо вони короткі або відсутні
         key_insights = results.get("Key Insights", "")
-        if len(key_insights.split()) < 50:  # Якщо менше 50 слів
-            key_insights = self._structure_insights(key_insights, summary)
+        
+        # Перевіряємо, чи key_insights є рядком або списком
+        if isinstance(key_insights, str):
+            # Якщо це рядок і він короткий
+            if len(key_insights.split()) < 50:  
+                key_insights = self._structure_insights(key_insights, summary)
+        elif isinstance(key_insights, list):
+            # Якщо це список, перетворюємо його на рядок для подальшої обробки
+            if key_insights and len(" ".join(str(item) for item in key_insights).split()) < 50:
+                # Перетворюємо список в рядок для функції _structure_insights
+                insights_text = "\n".join(str(item) for item in key_insights)
+                key_insights = self._structure_insights(insights_text, summary)
         
         # Форматуємо список джерел
         sources = results.get("Sources Used", "")
@@ -83,8 +93,22 @@ class ResultsEnhancer:
         
         # Розширюємо обмеження дослідження
         limitations = results.get("Limitations of the Research", "")
-        if len(limitations.split()) < 30:  # Якщо менше 30 слів
-            limitations = self._expand_limitations(limitations)
+        
+        # Перевіряємо, чи limitations є рядком
+        if isinstance(limitations, str):
+            # Якщо це рядок і він короткий
+            if len(limitations.split()) < 30:  # Якщо менше 30 слів
+                limitations = self._expand_limitations(limitations)
+        elif isinstance(limitations, list):
+            # Якщо це список, перетворюємо його на рядок
+            if limitations:
+                limitations_text = "\n".join(str(item) for item in limitations)
+                if len(limitations_text.split()) < 30:
+                    limitations = self._expand_limitations(limitations_text)
+                else:
+                    limitations = limitations_text
+            else:
+                limitations = self._expand_limitations("")  # Порожній список
             
         # Формуємо покращені результати
         enhanced_results = {
@@ -111,18 +135,48 @@ class ResultsEnhancer:
         Returns:
             Перетворені результати дослідження
         """
-        # Отримуємо повний звіт для аналізу
+        # Отримуємо повний звіт та основні поля для аналізу
         full_report = results.get("full_report", "")
+        
+        # Отримуємо короткий підсумок з різних можливих полів
+        summary = ""
+        if "summary" in results:
+            summary = results["summary"]
+        elif "Summary" in results:
+            summary = results["Summary"]
+        elif isinstance(full_report, str) and len(full_report) > 0:
+            # Якщо немає підсумку, але є повний звіт, використовуємо перші 200 символів
+            summary = full_report[:200] + "..." if len(full_report) > 200 else full_report
         
         # Намагаємось видобути джерела з повного звіту
         sources = self._extract_sources(full_report)
         
+        # Отримуємо ключові спостереження
+        key_insights = ""
+        if "key_insights" in results:
+            key_insights = results["key_insights"]
+        elif "Key Insights" in results:
+            key_insights = results["Key Insights"]
+        else:
+            key_insights = self._extract_key_insights(full_report)
+        
+        # Отримуємо обмеження дослідження
+        limitations = ""
+        if "limitations" in results:
+            limitations = results["limitations"]
+        elif "Limitations" in results:
+            limitations = results["Limitations"]
+        elif "Limitations of the Research" in results:
+            limitations = results["Limitations of the Research"]
+        else:
+            limitations = self._extract_limitations(full_report) or "Обмеження дослідження не були вказані."
+        
         # Створюємо структуру, подібну до того, що ми хочемо отримати
         new_structure = {
             "Summary of Findings": summary,
-            "Key Insights": self._extract_key_insights(full_report),
+            "Key Insights": key_insights,
             "Sources Used": sources,
-            "Limitations of the Research": self._extract_limitations(full_report) or "Обмеження дослідження не були вказані."
+            "Limitations of the Research": limitations
         }
         
         # Розширюємо короткі секції
