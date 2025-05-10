@@ -62,8 +62,11 @@ class ResearchAgent:
         """
         self.logger.info("Initializing research tools")
         
-        # Alias for compatibility with tests
-        _setup_tools = _initialize_tools
+    def _setup_tools(self):
+        """
+        Alias for _initialize_tools for compatibility with tests.
+        """
+        return self._initialize_tools()
         # Initialize search tool
         search_config = self.config.get("tools", {}).get("search", {})
         self.search_tool = SearchAPITool(search_config)
