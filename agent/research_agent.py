@@ -684,19 +684,34 @@ research_results
             available_tools = [t.__class__.__name__ for t in self.tools]
             self.logger.info(f"Available tools: {', '.join(available_tools)}")
             
-            # Підготовка задачі для виконання
-            research_instructions = f"""
-            You are a research assistant conducting a thorough investigation on: '{query}'.
-            Follow this research plan: {plan}
-            
-            Provide comprehensive results including:
-            1. Summary of findings
-            2. Key insights 
-            3. Sources used (with URLs)
-            4. Limitations of the research
-            
-            Be detailed, factual, and cite your sources.
-            """
+            # Підготовка задачі для виконання залежно від встановленої мови
+            if self.language == "uk":
+                research_instructions = f"""
+                Ви - дослідницький асистент, який проводить ґрунтовне дослідження на тему: '{query}'.
+                Дотримуйтесь цього плану дослідження: {plan}
+                
+                Надайте вичерпні результати, які включають:
+                1. Узагальнення отриманої інформації
+                2. Ключові висновки
+                3. Використані джерела (з URL-посиланнями)
+                4. Обмеження дослідження
+                
+                Будьте детальними, об'єктивними та цитуйте ваші джерела.
+                Обов'язково надайте фінальний результат українською мовою.
+                """
+            else:
+                research_instructions = f"""
+                You are a research assistant conducting a thorough investigation on: '{query}'.
+                Follow this research plan: {plan}
+                
+                Provide comprehensive results including:
+                1. Summary of findings
+                2. Key insights 
+                3. Sources used (with URLs)
+                4. Limitations of the research
+                
+                Be detailed, factual, and cite your sources.
+                """
             
             # Підготовка загальних даних запиту
             total_steps = len(plan["steps"])
