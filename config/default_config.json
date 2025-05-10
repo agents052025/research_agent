@@ -1,0 +1,52 @@
+{
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4",
+    "temperature": 0.7
+  },
+  "tools": {
+    "search": {
+      "enabled": true,
+      "api_key_env": "SERPAPI_API_KEY",
+      "engine": "google",
+      "max_results": 10
+    },
+    "url_fetcher": {
+      "enabled": true,
+      "timeout": 30,
+      "max_size": 1048576
+    },
+    "pdf_reader": {
+      "enabled": true,
+      "max_pages": 50
+    },
+    "data_analysis": {
+      "enabled": true,
+      "packages": ["pandas", "numpy"]
+    },
+    "visualization": {
+      "enabled": true,
+      "max_width": 80,
+      "use_unicode": true
+    },
+    "database": {
+      "enabled": true,
+      "path": "data/research_data.db",
+      "cache_enabled": true,
+      "cache_ttl": 86400
+    }
+  },
+  "planning": {
+    "max_steps": 10,
+    "step_timeout": 300,
+    "research_depth": "medium"
+  },
+  "prompts": {
+    "system_prompt": "You are a research assistant tasked with gathering, analyzing, and synthesizing information.\nFollow these guidelines:\n1. Break down complex research tasks into logical steps\n2. Gather information from credible sources\n3. Analyze data objectively\n4. Synthesize findings into cohesive reports\n5. Provide proper citations for all information\n6. Highlight limitations and uncertainties in your findings"
+  },
+  "output": {
+    "format": "markdown",
+    "include_citations": true,
+    "include_timestamp": true
+  }
+}
