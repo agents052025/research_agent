@@ -1,0 +1,15 @@
+
+Summary of Findings:
+The research focused on frameworks for building single-agent AI systems in 2025. Several key frameworks were identified, including LangChain, AutoGen, and CrewAI. These frameworks are noted for their modular designs, integration capabilities, and support for complex workflows. LangChain, for example, supports a range of integrations and has a rich ecosystem for building LLM-powered agents.
+
+Key Insights:
+1. Modular Design: Many frameworks offer modular designs that allow for extensive customization and flexibility in building AI agents.
+2. Integration Capabilities: High compatibility with various tools and APIs is common, facilitating complex workflows.
+3. Focus on Autonomy: There's a significant emphasis on building agents that can operate autonomously without constant human input.
+
+Sources Used:
+1. Medium article by Edwin Lisowski: https://medium.com/@elisowski/top-ai-agent-frameworks-in-2025-9bcedab2e239
+2. Kubiya AI Resources: https://www.kubiya.ai/resource-post/top-10-ai-agent-frameworks-for-building-autonomous-workflows-in-2025
+
+Limitations of the Research:
+The research is limited by the availability of updated and comprehensive sources. Some of the frameworks are rapidly evolving, and the information might become outdated swiftly. Furthermore, the analysis was confined to English language sources, potentially omitting relevant frameworks discussed in other languages.

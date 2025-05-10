@@ -43,7 +43,7 @@
   "planning": {
     "max_steps": 10,
     "step_timeout": 300,
-    "research_depth": "medium"
+    "research_depth": "deep"
   },
   "prompts": {
     "system_prompt": "You are a research assistant tasked with gathering, analyzing, and synthesizing information.\nFollow these guidelines:\n1. Break down complex research tasks into logical steps\n2. Gather information from credible sources\n3. Analyze data objectively\n4. Synthesize findings into cohesive reports\n5. Provide proper citations for all information\n6. Highlight limitations and uncertainties in your findings"

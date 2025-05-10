@@ -1,0 +1,21 @@
+Comprehensive Research Report on AI Agents
+
+Summary of Findings:
+AI agents are categorized based on capabilities such as reflex actions, goal orientation, utility consideration, and learning abilities. They serve various functional roles across industries, enhancing automation and decision-making processes.
+
+Key Insights:
+- Simple reflex agents operate on immediate perception without internal state.
+- Model-based reflex agents maintain internal state to handle different scenarios.
+- Goal-based agents act to achieve defined goals, improving decision-making.
+- Utility-based agents optimize their performance based on a utility function.
+- Learning agents improve their actions based on historical data and experiences.
+
+Sources Used:
+- Types of AI Agents - IBM (https://www.ibm.com/think/topics/ai-agent-types)
+- What are AI agents? Definition, examples, and types | Google Cloud (https://cloud.google.com/discover/what-are-ai-agents)
+- 13 Types of AI Agents (with Examples) - Multimodal (https://www.multimodal.dev/post/13-types-of-ai-agents)
+- 7 Types of AI Agents to Automate Your Workflows in 2025 (https://www.digitalocean.com/resources/articles/types-of-ai-agents)
+- AI Agents Categories (https://aiagentsdirectory.com/categories)
+
+Limitations of the Research:
+The research faced challenges in visualizing data using the provided tools, which may have limited the ability to present findings in graphical formats.

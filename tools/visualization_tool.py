@@ -304,14 +304,14 @@ class VisualizationTool(Tool):
         }
         
     def create_bar_chart(self, data: Union[Dict[str, Union[int, float]], List[Tuple[str, Union[int, float]]],
-                                         pd.Series, List[Union[int, float]]],
-                         labels: Optional[List[str]] = None, title: Optional[str] = None,
-                         sort: bool = False, max_items: int = 20) -> Dict[str, Any]:
+                                     pd.Series, List[Union[int, float, dict]], List[Dict[str, Any]]],
+                     labels: Optional[List[str]] = None, title: Optional[str] = None,
+                     sort: bool = False, max_items: int = 20) -> Dict[str, Any]:
         """
         Create a horizontal bar chart visualization.
         
         Args:
-            data: Data to visualize (dict mapping labels to values, or list of values)
+            data: Data to visualize (dict mapping labels to values, list of values, or list of dicts)
             labels: Labels for values (if data is a list of values)
             title: Chart title
             sort: Whether to sort bars by value
@@ -328,16 +328,34 @@ class VisualizationTool(Tool):
         elif isinstance(data, pd.Series):
             items = list(zip(data.index.astype(str), data.values))
         elif isinstance(data, list):
-            if all(isinstance(x, (int, float)) for x in data):
+            # Список словників зі спеціальними ключами Insight/Count
+            if all(isinstance(x, dict) and "Insight" in x and "Count" in x for x in data):
+                items = [(item["Insight"], item["Count"]) for item in data]
+            # Список словників з довільними ключами (беремо перші два ключі)
+            elif all(isinstance(x, dict) and len(x) >= 2 for x in data):
+                items = []
+                for item_dict in data:
+                    keys = list(item_dict.keys())
+                    if len(keys) >= 2:
+                        # Беремо перші два ключі в словнику як мітку та значення
+                        items.append((str(item_dict[keys[0]]), item_dict[keys[1]] if isinstance(item_dict[keys[1]], (int, float)) else 1))
+                    else:
+                        # Якщо тільки один ключ, використовуємо його як мітку та 1 як значення
+                        items.append((str(item_dict[keys[0]]), 1))
+            # Звичайний список числових значень
+            elif all(isinstance(x, (int, float)) for x in data):
                 if labels and len(labels) >= len(data):
                     items = list(zip(labels, data))
                 else:
                     item_labels = ["Item %d" % (i+1) for i in range(len(data))]
                     items = list(zip(item_labels, data))
+            # Список кортежів (мітка, значення)
             elif all(isinstance(x, tuple) and len(x) == 2 for x in data):
                 items = data
             else:
-                return {"error": "Unsupported data format for bar chart"}
+                # Для будь-яких інших форматів використовуємо рядкове представлення як мітку
+                # і позицію в списку як значення
+                items = [(str(x), i+1) for i, x in enumerate(data)]
         else:
             return {"error": "Unsupported data format for bar chart"}
             

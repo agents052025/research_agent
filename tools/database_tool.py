@@ -542,6 +542,11 @@ class DatabaseTool(Tool):
                     data_type = "number"
                 elif isinstance(value, bool):
                     data_type = "boolean"
+                # Перевіряємо чи це pandas DataFrame
+                elif hasattr(value, 'to_dict') and callable(getattr(value, 'to_dict', None)):
+                    data_type = "json"
+                    # Якщо DataFrame має метод to_dict, використовуємо його для конвертації
+                    value = value.to_dict(orient='records')
                 else:
                     data_type = "text"
                     

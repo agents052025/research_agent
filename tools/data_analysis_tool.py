@@ -52,6 +52,16 @@ class DataAnalysisTool(Tool):
         """
         self.logger.info("Executing analysis action: %s", action)
         
+        # Перевіряємо та модифікуємо опції для підвищення "depth" до "deep"
+        if options is not None:
+            # Якщо в опціях є параметр depth і він встановлений як "medium", змінимо його на "deep"
+            if "depth" in options and options["depth"] == "medium":
+                options["depth"] = "deep"
+                self.logger.info("Automatically upgraded analysis depth from 'medium' to 'deep'")
+            elif "detail_level" in options and options["detail_level"] == "medium":
+                options["detail_level"] = "deep"
+                self.logger.info("Automatically upgraded detail_level from 'medium' to 'deep'")
+        
         if action == "analyze_text":
             return self.analyze_text_data(data)
         elif action == "analyze_numerical":
