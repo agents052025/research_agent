@@ -1,5 +1,5 @@
 """
-Simple Research Agent - A lightweight implementation using OpenAI API directly.
+Simple Research Agent - Implementation using smolagents framework.
 """
 
 import os
@@ -8,16 +8,21 @@ import logging
 import re
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Callable
-import requests  # Використання requests замість бібліотеки anthropic
 from rich.console import Console
+
+# Імпорт smolagents
+from smolagents import LiteLLMModel, CodeAgent, Tool, PythonInterpreterTool
 
 from core.research_planner import ResearchPlanner
 from core.context_manager import ContextManager
+from tools.search_tool import SearchAPITool
+from tools.url_fetcher_tool import URLFetcherTool
+from tools.pdf_reader_tool import PDFReaderTool
 from utils.language_strings import get_string
 
 class SimpleResearchAgent:
     """
-    A simple research agent that uses OpenAI API directly without smolagents dependency.
+    A simple research agent that uses smolagents framework.
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -43,6 +48,12 @@ class SimpleResearchAgent:
         
         # Initialize the research planner
         self.planner = ResearchPlanner(self.llm_config)
+        
+        # Initialize tools
+        self._initialize_tools()
+        
+        # Initialize the agent
+        self.agent = self._initialize_agent()
     
     def detect_language(self, text: str) -> str:
         """
@@ -60,9 +71,113 @@ class SimpleResearchAgent:
             return "uk"
         return "en"
     
+    def _initialize_tools(self):
+        """
+        Initialize all the tools needed for research.
+        """
+        self.logger.info("Initializing research tools")
+        
+        # Initialize search tool
+        try:
+            search_config = self.config.get("tools", {}).get("search", {})
+            self.search_tool = SearchAPITool(search_config)
+            self.logger.info("Search tool initialized")
+        except Exception as e:
+            self.logger.error("Error initializing search tool: %s", str(e))
+            self.search_tool = None
+            
+        # Initialize URL fetcher tool
+        try:
+            url_fetcher_config = self.config.get("tools", {}).get("url_fetcher", {})
+            self.url_fetcher_tool = URLFetcherTool(url_fetcher_config)
+            self.logger.info("URL fetcher tool initialized")
+        except Exception as e:
+            self.logger.error("Error initializing URL fetcher tool: %s", str(e))
+            self.url_fetcher_tool = None
+            
+        # Initialize PDF reader tool
+        try:
+            pdf_reader_config = self.config.get("tools", {}).get("pdf_reader", {})
+            self.pdf_reader_tool = PDFReaderTool(pdf_reader_config)
+            self.logger.info("PDF reader tool initialized")
+        except Exception as e:
+            self.logger.error("Error initializing PDF reader tool: %s", str(e))
+            self.pdf_reader_tool = None
+            
+        # Створення списку інструментів з правильною перевіркою типів
+        self.tools = []
+        
+        # Додаємо інструменти тільки якщо вони є екземплярами Tool
+        for tool in [self.search_tool, self.url_fetcher_tool, self.pdf_reader_tool]:
+            if tool is not None and (isinstance(tool, Tool) or issubclass(type(tool), Tool)):
+                self.tools.append(tool)
+            elif tool is not None:
+                self.logger.warning("Інструмент %s не є екземпляром Tool і не буде доданий", type(tool).__name__)
+                
+        # Додаємо PythonInterpreterTool
+        try:
+            python_tool = PythonInterpreterTool()
+            if isinstance(python_tool, Tool) or issubclass(type(python_tool), Tool):
+                self.tools.append(python_tool)
+            else:
+                self.logger.warning("PythonInterpreterTool не є екземпляром Tool і не буде доданий")
+        except Exception as e:
+            self.logger.error("Помилка ініціалізації PythonInterpreterTool: %s", str(e))
+            
+    def _initialize_agent(self):
+        """
+        Initialize the agent with the necessary tools and configuration.
+        
+        Returns:
+            An instance of the research agent
+        """
+        self.logger.info("Initializing research agent")
+        
+        # Встановлюємо змінні середовища для API ключів
+        # Згідно з документацією LiteLLM, це правильний спосіб налаштування
+        # Визначаємо модель для використання
+        model_name = self.llm_config.get("model", "claude-3-haiku-20240307")
+        
+        # Встановлюємо відповідні змінні середовища для API ключів
+        if "claude" in model_name.lower():
+            # Для моделей Anthropic
+            anthropic_api_key = self.llm_config.get("api_key") or os.environ.get("ANTHROPIC_API_KEY")
+            if not anthropic_api_key:
+                raise ValueError("No Anthropic API key found. Please set ANTHROPIC_API_KEY in your .env file")
+            
+            # Встановлюємо змінну середовища для Anthropic
+            os.environ["ANTHROPIC_API_KEY"] = anthropic_api_key
+            
+            # Використовуємо правильний формат моделі
+            model_name = model_name  # Не потрібно додавати префікс "anthropic/"
+        else:
+            # Для моделей OpenAI
+            openai_api_key = self.llm_config.get("api_key") or os.environ.get("OPENAI_API_KEY")
+            if not openai_api_key:
+                raise ValueError("No OpenAI API key found. Please set OPENAI_API_KEY in your .env file")
+            
+            # Встановлюємо змінну середовища для OpenAI
+            os.environ["OPENAI_API_KEY"] = openai_api_key
+        
+        # Ініціалізуємо LLM модель з правильними параметрами
+        self.logger.info(f"Initializing LiteLLM model: {model_name}")
+        llm = LiteLLMModel(
+            model=model_name,
+            temperature=self.llm_config.get("temperature", 0.7)
+        )
+        
+        # Create the agent with the tools
+        agent = CodeAgent(
+            model=llm,  # CodeAgent очікує параметр 'model', а не 'llm'
+            tools=self.tools
+            # Параметр verbose не підтримується в CodeAgent
+        )
+        
+        return agent
+        
     def process_query(self, query: str, progress_callback=None) -> Dict[str, Any]:
         """
-        Process a research query and return results using Anthropic API.
+        Process a research query and return results using smolagents framework.
         
         Args:
             query: Research query to process
@@ -93,98 +208,62 @@ class SimpleResearchAgent:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # Use Anthropic API directly
-            api_key = self.llm_config.get("api_key") or os.environ.get("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise ValueError("No Anthropic API key found. Please set ANTHROPIC_API_KEY in your .env file")
-                
-            # Обов'язково використовуємо модель Claude, а не GPT
-            model = "claude-3-haiku-20240307"  # Фіксоване значення моделі Anthropic
-            temperature = self.llm_config.get("temperature", 0.7)
-            
-            # Prepare the system and user messages
+            # Prepare the system and user messages for the agent
             system_message = """
             You are a research assistant that helps users find information on various topics.
-            For the given query, provide a comprehensive research report following these steps:
+            Your task is to conduct thorough research on the given query and provide a comprehensive report.
             
-            1. Analyze the query and break it down into key components
-            2. Provide relevant information for each component
-            3. Include likely sources of information
-            4. Summarize your findings
+            Follow these guidelines:
+            1. Break down the query into key components
+            2. Search for relevant information from reliable sources
+            3. Analyze and synthesize the information
+            4. Provide a well-structured report with the following sections:
+               - Summary: A concise overview of your findings
+               - Findings: Detailed information organized by subtopics
+               - Sources: List of sources used in your research
             
-            Format your response as a Markdown document with the following sections:
-            - Summary
-            - Key Findings
-            - Details
-            - Sources
+            Be objective, thorough, and provide accurate information with proper citations.
             """
             
-            user_message = f"Please research the following query: {query}\n\nUse this research plan: {json.dumps(plan, ensure_ascii=False)}"
+            user_message = f"""
+            Research query: {query}
             
-            # Track progress
+            Research plan:
+            {json.dumps(plan, indent=2, ensure_ascii=False)}
+            
+            Please conduct thorough research on this topic and provide a comprehensive report.
+            Use the research plan as a guide but feel free to adjust it as needed based on your findings.
+            
+            For Ukrainian queries, please provide the response in Ukrainian.
+            For English queries, please provide the response in English.
+            """
+            
+            # Report progress
             if progress_callback:
-                progress_callback(20)  # Initial progress
+                progress_callback(0.1)  # Research started
+                
+            # Run the agent with the query
+            self.logger.info("Running research agent")
+            # CodeAgent.run() не приймає аргументи system_message та user_message
+            # Замість цього передаємо запит напряму
+            prompt = f"{system_message}\n\n{user_message}"
+            agent_response = self.agent.run(prompt)
             
-            # Використаємо прямий HTTP запит через requests для більшого контролю
-            self.logger.info(f"Sending request to Anthropic API using model {model}")
+            # Report progress
+            if progress_callback:
+                progress_callback(0.7)  # Research completed, formatting results
             
-            # Підготовка даних для API запиту
-            headers = {
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
-            }
-            
-            # Дані запиту у форматі, якого очікує Anthropic API
-            payload = {
-                "model": model,
-                "max_tokens": 4000,
-                "temperature": temperature,
-                "system": system_message,
-                "messages": [
-                    {"role": "user", "content": user_message}
-                ]
-            }
-            
-            # Журналювання деталей запиту для діагностики
-            # Логування заголовків (з маскуванням самого ключа)
-            safe_headers = headers.copy()
-            if "x-api-key" in safe_headers:
-                # Залишаємо тільки перші і останні 4 символи ключа для безпеки
-                api_key_value = safe_headers["x-api-key"]
-                if len(api_key_value) > 8:
-                    masked_key = api_key_value[:4] + "*" * (len(api_key_value) - 8) + api_key_value[-4:]
-                    safe_headers["x-api-key"] = masked_key
-            
-            self.logger.info(f"Request headers: {safe_headers}")
-            self.logger.info(f"Request endpoint: https://api.anthropic.com/v1/messages")
-            
-            # Виконання запиту
-            response = requests.post(
-                "https://api.anthropic.com/v1/messages",
-                headers=headers,
-                json=payload,
-                timeout=60  # Додаємо таймаут для уникнення зависання запиту
-            )
+            # Отримуємо результат від агента
+            content = agent_response
             
             if progress_callback:
-                progress_callback(50)  # Progress after API request
-            
-            # Обробка відповіді
-            if response.status_code == 200:
-                result = response.json()
-                content = result["content"][0]["text"]
-            else:
-                raise Exception(f"Error code: {response.status_code} - {response.text}")
-            
-            if progress_callback:
-                progress_callback(80)  # Progress after receiving response
+                progress_callback(0.8)  # Progress after receiving response
             
             # Process the response content
             research_results = self._format_results(content, query, timestamp)
             
             if progress_callback:
-                progress_callback(100)  # Complete progress
+                progress_callback(1.0)  # Complete progress
             
             # Store results in context
             if hasattr(self.context, 'add_results'):
